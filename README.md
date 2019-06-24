@@ -3,21 +3,22 @@ Materials for the Movement Ecology Seminar Series at UC, Berkeley ESPM Dept
 
 Planning and writing schedule:
   
-June 10	Initial course prep meeting  
-j-Attend	o-Attend  
+1. June 10	Initial course prep meeting  
+* J-Attend	 
+* O-Attend  
   
-June 24	First lesson draft check-in	  
-j-Draft of RSF lesson on github	  
-o-Draft of Migration lesson on github  
+2. June 24	First lesson draft check-in	  
+* J-Draft of RSF lesson on github  	  
+* O-Draft of Migration lesson on github  
   
-July 22	Second draft check-in	    
-j-Draft of Clusters session	  
-o-Draft of Home Range  
+3. July 22	Second draft check-in	    
+* J-Draft of Clusters session	    
+* O-Draft of Home Range    
   
-August 12	Third draft check-in	    
-j-Draft of Basics in R	  
-o-Draft spatial data in R: points, polygons and rasters  
+4. August 12	Third draft check-in	    
+* J-Draft of Basics in R	  
+* O-Draft spatial data in R: points, polygons and rasters  
   
-September 2	Fourth draft check-in	    
-j-Draft of SSFs	Draft   
-o-State-space models in R  
+5. September 2	Fourth draft check-in	    
+* J-Draft of SSFs	Draft   
+* O-State-space models in R  
