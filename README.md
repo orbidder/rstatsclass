@@ -2,8 +2,7 @@
 Materials for the Movement Ecology Seminar Series at UC, Berkeley ESPM Dept
 
 Planning and writing schedule:
-
-Date	Decription	J responsibilities	O responsibilities
+  
 June 10	Initial course prep meeting  
 j-Attend	o-Attend  
   
