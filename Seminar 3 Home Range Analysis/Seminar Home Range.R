@@ -178,27 +178,57 @@ puma_ltraj <- as.ltraj(xy = data.frame("x" = puma$x, "y"=puma$y),
 #Let's search for the optimum sig1, assuming our GPS error is 60 m
 #Here's a for loop, going through each puma in puma_ltraj, finding the optimum sig1, which is stored in
 #an object called lik, and then calculating the kernelbb with that sig1 value
+lik <- liker(puma_ltraj, sig2 = 60, rangesig1 = c(1, 40)) #find the optimum sig_1
+bbmm_puma <- kernelbb(puma_ltraj, sig1 = lik[[1]]$sig1, sig2 = 60, grid = 50)#calculate the bbmm
+image(bbmm_puma)
 
-lik <- liker(puma_ltraj[1], sig2 = 60, rangesig1 = c(1, 40)) #find the optimum sig_1
-bbmm_puma <- kernelbb(puma_ltraj[1], sig1 = lik[[1]]$sig1, sig2 = 60, grid = 50)#calculate the bbmm
+# Notice the sig1 value is different for each animal. So usually we'd have to pick a value to share
+#among all animals, OR we can write a loop that calculates the sig1 for each animal, calculates a 
+#bbmm, and combines the outputs in a list...
 
 #Exercise 3: Write another for loop that repeats these steps for the other 2 pumas, and places the
 #results in to the bbmm_puma object *HINT*: assign using the list notation bbmm_puma[[i]] <- kernelbb()
 #Answer 3:
-#THIS IS BROKEN RIGHT NOW#
-bbmm_puma <- list()
 
+bbmm_puma <- list()
 for (i in 1:3) {
   print(paste('Calculating BBMM for animal: ',ld(puma_ltraj[i])$id[1], sep = ""))
   lik <- liker(puma_ltraj[i], sig2 = 60, rangesig1 = c(1, 40)) #find the optimum sig_1
   bbmm_puma[[i]] <- kernelbb(puma_ltraj[i], sig1 = lik[[1]]$sig1, sig2 = 60, grid = 50)#calculate the bbmm
+  bbmm_puma[[i]]$id <- ld(puma_ltraj[i])$id[1]
 }
 
-#We can then plug this in to our BBMM to get our home range
+#Now kernelbb isn't optimized for doing multiple animals at once like kernelUD is (not to my knowledge!),
+#but we can use this iterative approach to make a list of results, and then combine at the end to give
+#us a spatialpolygonsdataframe, like kernelUD does...
+
+#First, change the class of bbmm_puma to adehabitats matrix class...
 class(bbmm_puma) <- "estUDm"
-image(bbmm_puma)
-bbmm_contours <- getverticeshr(bbmm_puma, 95) #we can get the contours just as we did with the KUD
+image(bbmm_puma) #Notice the ids are gone! We can get them back later
+
+#Let's get the contours for each animal and get the polygons for output
+bbmm_contours <- list()
+
+for (i in 1:3) {
+  #we can get the contours just as we did with the KUD, but only one at a time...
+  bbmm_contours[[i]] <- getverticeshr(bbmm_puma[[i]], 95) 
+  #To get the IDs back, we have to paste them in to the appropriate slots...
+  slot(slot(bbmm_contours[[i]], "polygons")[[1]], "ID") <- as.character(bbmm_puma[[i]]$id[1])
+  }
+#This code will combine a list of spatialpolygons, in to a spatialpolygonsdataframe
+#Getting polygon IDs
+IDs <- sapply(bbmm_contours, function(x)
+  slot(slot(x, "polygons")[[1]], "ID"))
+
+#Checking
+length(unique(IDs)) == length(bbmm_contours)
+
+#Making SpatialPolygons from list of polygons
+bbmm_contours <- SpatialPolygons(lapply(bbmm_contours,
+                               function(x) slot(x, "polygons")[[1]]))
+
 plot(bbmm_contours, lwd=2)
+#Now we can output using the writeOGR() method
 
 #So where does this 'dynamic' part of BBMM come in? Well with the calculations above, we assume a constant
 #value for sig1 throughout the entire track. Of course, animals change their movement rates as they change
