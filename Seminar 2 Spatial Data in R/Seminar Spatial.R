@@ -183,6 +183,8 @@ print(paste("Distance measurement took",round(diwedd-dechrau,2),attributes(amser
 
 head(elk_utm$dist_river)
 
+#############################################################################################################
+
 #SF#
 #As mentioned above, the sf package has many of sp's functionality, but has a couple of important advantages,
 #namely, that it is faster, works with tidyverse packages, and can combine different geometry types in 
@@ -190,8 +192,9 @@ head(elk_utm$dist_river)
 
 #reading in csv files with sf is similar to sp
 elk_data <- read.csv("Spatial_Wiggins_Elk.csv", header = T, stringsAsFactors = F)
-
-elk_data <- st_as_sf(elk_data, 
+elk_data$Date_Time <- as.POSIXct(elk_data$Date_Time, "%Y-%m-%d %H:%M:%S", tz = "MST")
+elk_data <- elk_data[elk_data$Latitude > 20,] #don't forget we corrected that outlier!
+elk_sf <- st_as_sf(elk_data, 
                      coords = c('Longitude', 'Latitude'), 
                      crs = '+init=epsg:4326')
 
@@ -227,17 +230,18 @@ map
 #and of course sf has some useful spatial functions. For instance joins can take attributes from one
 #object and add them to another.
 
-pub_lands_sf$id <- as.factor(1:312)
+pub_lands_sf$id <- as.factor(1:312) #make a unique index for each polygon
 elk_sf <- st_join(elk_sf, pub_lands_sf, join = st_intersects, left = T) #adds all pub_lands_sf attributes
 plot(elk_sf['SURFACE'])
 
-#and we can make plots of how many points are in each polygon
+#and we can count how many points are in each polygon
 point_in_poly <- st_join(elk_sf, pub_lands_sf, join = st_within)
-
 point_poly_count <- count(point_in_poly$id)
-
 tract_point_sf <- left_join(pub_lands_sf, point_poly_count, by = c("id" = "x"))
-plot(tract_point_sf['freq'])
+map <- mapview(tract_point_sf['freq'],
+               layer.name = '# locations')
+map
+
 
 #sf also has its own distance function, st_distance(), you may see some tutorials with the following method
 #Dont run...
@@ -254,7 +258,8 @@ diwedd <- Sys.time() #stop the timer
 amser <- diwedd-dechrau #calc the time elapsed
 print(paste("Measurements took",round(diwedd-dechrau,2),attributes(amser)$units,sep = " "))
 
-head(elk_sf) #values are the same, but its much faster!
+head(elk_sf) #values are the same, but its much faster (I hope!)
+
 
 #Rasters#
 #So far we have concentrated on vector data; points, lines and polygons. A fourth and very important data
@@ -266,7 +271,10 @@ head(elk_sf) #values are the same, but its much faster!
 elev <- raster('wiggins_dem.tif')
 plot(elev) ; plot(elk_sf[2], add=T) #plot elevation and overlay the elk locations
 
-#we can get some info about are raster easily...
+#hist() will give you a summary histogram of values in the raster
+hist(elev)
+
+#we can get some info about our raster easily...
 extent(elev)
 res(elev)
 crs(elev)
@@ -286,10 +294,108 @@ plot(slo)
 dem <- stack(elev,asp,slo)
 plot(dem)
 
+#Individual layers in a stack can be called using the $ operator
+dem$wiggins_dem
+
 #think of a stack as a 3D matrix, where each layer or slice represents a new dimension of the same
-#area in space (in our example, elevation, aspect and slope). When measuring things like NDVI, we might
-#stack revisits by the satellite and index them by time, allowing us to look at trends over the seasons
-#(i.e. phenology) or to look at conditions on the ground in time and space for use in our movement
-#models (see session on SSFs)
+#area in space (in our example, elevation, aspect and slope). For multi-spectral imagery, the layers
+#often correspond with the different spectral bands (e.g. IR, visible light bands). When measuring things 
+#like NDVI, we might stack revisits by the satellite and index them by time, allowing us to look at trends 
+#over the seasons (i.e. phenology) or to look at conditions on the ground in time and space for use in our 
+#movement models (see session on SSFs).
 
 #Some restrictions on stacks are; they must have the same extent, resolution and projection.
+
+#Notice that our rivers and public lands objects are smaller than the dem raster...
+st_bbox(pub_lands_sf)
+st_bbox(elev)
+plot(elev) ; plot(pub_lands_sf[1], add=T) #plot elevation and overlay the elk locations
+
+#But we can use the crop function to cut the object to the extent of another
+sm_dem <- crop(dem, pub_lands_sf)
+plot(sm_dem$wiggins_dem, axes=T) ; plot(pub_lands_sf[1], add=T) #plot elevation and overlay the elk locations
+
+#or even mask the raster to the outline of the polygon
+mask_dem <- mask(dem, pub_lands_sf)
+plot(mask_dem$wiggins_dem, axes=T) #There are no polygons in the middle (private land), so the data are NA
+
+
+#For movement modelling, you might want to sample the raster values at each location, which can be easily done
+#using raster's extract() function
+
+elk_sf$id = seq_len(nrow(elk_sf)) #extract needs sf objects to have a unique index called id
+elk_sf$elevation <- extract(sm_dem$wiggins_dem, elk_sf)
+
+plot(elk_sf['elevation'])
+
+#and remember the data in sf objects can be treated just like regular data frames...
+plot(elk_sf$Date_Time, elk_sf$elevation, axes = T) #annual cycle of elk elevation
+
+
+#Exercise 3:
+#Using the functions in sf and raster, sample the mean elevation in each polygon and add it to the 
+#pub_lands_sf attribute table as 'mean_elev (10 mins)
+
+#HINT: This should be done in two steps. Assign the output of the first step to a temp object, 
+#what is the output type and structure? Look at the sapply function docs, how can we use it to get 
+#the mean for each polyon id back in to our polygon sf object?
+
+#Answer 3:
+lands_dem <- extract(sm_dem$wiggins_dem, pub_lands_sf)
+pub_lands_sf$mean_elev <- sapply(lands_dem, mean)
+
+
+#This final bit of code makes an aesthetically pleasing map with contour lines and hillshade, feel free to
+#use it in your own work...
+
+# create hillshade
+hs = hillShade(slope = dem$slope, aspect = dem$aspect)
+plot(hs, col = gray(0:100 / 100), legend = FALSE)
+# overlay with DEM
+plot(dem$wiggins_dem, col = terrain.colors(25), alpha = 0.5, legend = FALSE, add = TRUE)
+# add contour lines
+contour(dem$wiggins_dem, col = "white", add = TRUE, nlevels = 5)
+
+#or if you ever need to make contours to plot in ggplot...
+cl <- rasterToContour(dem$wiggins_dem, nlevels = 5)
+cl <- st_as_sf(cl)
+
+#Note rasters have to be turned in to data frames to work with ggplot
+dem_df <- as.data.frame(dem$wiggins_dem, xy=T)
+hs <- as.data.frame(hs, xy=T)
+str(dem_df)
+
+ggplot() +
+  geom_raster(data = dem_df , aes(x = x, y = y, fill = wiggins_dem)) +
+  geom_raster(data = hs , aes(x = x, y = y, alpha = layer)) +
+  geom_sf(data = cl, color = 'white') +
+  scale_alpha(range = c(0.15, 0.65), guide = "none") +  
+  scale_fill_viridis_c() +
+  coord_sf()
+
+#Finally, our maps can be saved using the function ggsave()
+ggsave(filename = 'wiggins_dem_with_hill.png', plot = last_plot())
+
+#Exercise 4:
+#Using everything you've learned in this session, pick a new terrain metric (look at the docs) and 
+#sample it for each elk location. Then produce a map, including a dem basemap, hillshade, rivers and
+#scale bar and north arrows. Make it as aesthetically pleasing as possible using scale_fill_viridis_c() or
+#terrain.colors(). (15 mins)
+
+#Answer 4:
+tri <- terrain(dem$wiggins_dem, opt = "TRI")
+elk_sf$tri <- extract(tri, elk_sf)
+
+ggplot() +
+  #geom_sf(aes(color = tri)) +
+  geom_raster(data = dem_df , aes(x = x, y = y, fill = wiggins_dem)) +
+  geom_raster(data = hs , aes(x = x, y = y, alpha = layer)) +
+  scale_alpha(range = c(0.15, 0.65), guide = "none") +  
+  scale_fill_viridis_c(direction = -1) +
+  #scale_fill_distiller(palette = "Spectral") + 
+  #scale_fill_brewer(palette = "Greens") +
+  coord_sf() + 
+  #annotation_scale(location = "br", width_hint = 0.5) +
+  #annotation_north_arrow(location = "bl", which_north = "true", 
+  #                       style = north_arrow_fancy_orienteering) +
+  theme_light()
