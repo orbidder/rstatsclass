@@ -29,6 +29,10 @@ stime <- 1.33
 sdist <- 20
 fixr <- 3
 
+cluster_func <- function(df, stime, sdist, fixr){
+  
+}
+
 # find all the points that are fewer than stime days apart
 timearray <- array(0,c(nrow(puma4),nrow(puma4)))
 timedif<- array(0,c(nrow(puma4),nrow(puma4)))
