@@ -23,3 +23,7 @@ Planning and writing schedule:
 5. September 2	Fourth draft check-in	    
 * J-Draft of SSFs	Draft   
 * O-State-space models in R  
+
+6. September 16 - Inventory all functions used
+*Both J and O run through all seminars
+*Make sure tidy and sp functions are introduced in intro sessions
