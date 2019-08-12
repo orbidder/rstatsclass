@@ -14,11 +14,12 @@ library(rgeos)
 library(rgdal)
 
 # Read in, clean, and project all your data
-vicuna <- read_csv("/Users/justinesmith/Documents/UCB/Data/Vicuna_data/vicuna_data.csv") %>% 
+vicuna <- read_csv("vicuna_data.csv") %>% 
   dplyr::select(ID = animals_id, 4:6) %>% 
   st_as_sf(., coords = 3:4, crs = "+init=epsg:4326") %>% 
   st_transform("+init=epsg:32719") #%>% 
   #mutate(timestamp = lubridate::with_tz(ymd_hms(acquisition_time,tz="America/Los_Angeles"),"America/Argentina/San_Juan"))
+
 envtrasters <- stack("/Users/justinesmith/Documents/UCB/Data/Rasters/SGNP_all_stack_south_crop.tif") %>% 
   projectRaster(crs="+proj=utm +zone=19 +south +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0")
 names(envtrasters) <- c("aspect", "dem", "rough",  "slope",  "tri", "max_ndvi")
