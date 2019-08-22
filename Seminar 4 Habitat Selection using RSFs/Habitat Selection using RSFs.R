@@ -21,7 +21,7 @@ vicuna <- read_csv("vicuna_data.csv") %>%
   #mutate(timestamp = lubridate::with_tz(ymd_hms(acquisition_time,tz="America/Los_Angeles"),"America/Argentina/San_Juan"))
 
 envtrasters <- stack("/Users/justinesmith/Documents/UCB/Data/Rasters/SGNP_all_stack_south_crop.tif") %>% 
-  projectRaster(crs="+proj=utm +zone=19 +south +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0")
+#  projectRaster(crs="+proj=utm +zone=19 +south +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0")
 names(envtrasters) <- c("aspect", "dem", "rough",  "slope",  "tri", "max_ndvi")
 
 # Visualize environmental layers to make sure they make sense
