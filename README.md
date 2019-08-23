@@ -27,3 +27,5 @@ Planning and writing schedule:
 6. September 16 - Inventory all functions used
 * Both J and O run through all seminars
 * Make sure tidy and sp functions are introduced in intro sessions
+
+![Class Schedule](schedule.png)
