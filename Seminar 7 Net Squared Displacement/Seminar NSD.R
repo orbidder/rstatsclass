@@ -1,4 +1,4 @@
-#Seminar X: Net Squared Displacement Modelling
+#Seminar 7: Net Squared Displacement Modelling
 #O. R. Bidder, June 2019#
 
 #Please install the following package while you read the introduction!#

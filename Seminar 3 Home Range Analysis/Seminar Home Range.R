@@ -1,4 +1,4 @@
-#Seminar X: Home Range Analysis
+#Seminar 3: Home Range Analysis
 #O. R. Bidder, July 2019#
 
 #Please install the following package while you read the introduction!#
