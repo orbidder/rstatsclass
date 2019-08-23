@@ -32,3 +32,11 @@ sub_lands <- crop(pub_lands, Ps1)
 plot(Ps1, axes = TRUE); plot(pub_lands, col = 'blue', add=T); plot(elk_utm, col = 'red', add=T)
 plot(sub_lands, col = 'green', add=T)
 writeOGR(sub_lands, "wiggins_lands.shp", driver = "ESRI Shapefile", layer = "lands")
+
+#elk_conus
+elk_conus <- spTransform(elk_data, CRS('+init=epsg:5070'))
+elk_conus <- as.data.frame(elk_conus)
+elk_conus <- elk_conus[,-1]
+colnames(elk_conus)[4] <- 'X'
+colnames(elk_conus)[5] <- 'Y'
+write.csv(elk_conus, 'elk_other_proj.csv')

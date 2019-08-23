@@ -29,7 +29,7 @@ library(plyr)
 #sp is older, but its data structures are still the primary input for a lot of packages used in movement
 #ecology (e.g. adehabitat). sf is the tidyverse update on sp, includes some great functionality, and works
 #nicely with other tidyverse tools (e.g. ggplot2). We will start with sp...
-
+############################################################################################################
 #SP#
 #sp is a package that contains methods and classes for dealing with spatial data, primarily vector data
 #Of these vector data, there are three main types we will concentrate on today, points, lines and polygons.
@@ -62,10 +62,12 @@ plot(elk_data, axes = T) #axes show lon/lat
 #Luckily, we can manipulate sp's dataframes the same way we would any other data frame in R
 
 #Exercise 1: Write some code that would remove the outlier, but leave valid data intact (5 mins)
+#----------------------------------------------------------------------------------------------------------
 #Answer 1:
 elk_data <- elk_data[elk_data$Latitude > 20,] #keep only points above 20 degrees Latitude
 #or
 elk_data <- subset(elk_data, elk_data$Latitude > 20)
+#----------------------------------------------------------------------------------------------------------
 
 #Take a look at the data now it has been corrected...
 plot(elk_data, axes = T)
@@ -73,12 +75,12 @@ plot(elk_data, axes = T)
 #We can also look at the bounding box that contains all of our points
 elk_data@bbox
 
-#Many functions require our coordinates in m, so we can reproject using spTransform()
+#Many functions require our coordinates in meters, so we can reproject using spTransform()
 elk_utm <- spTransform(elk_data, CRS("+proj=utm +zone=12 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0"))
 plot(elk_utm, axes = T) #Notice now axes show metres!
 
 #Lines#
-#lines are similar to points, but now each feature is represented by a vector of coordinates (c(x,x,x),c(y,y,y))
+#Lines are similar to points, but now each feature is represented by a vector of coordinates (c(x,x,x),c(y,y,y))
 #common examples we might encounter in movement ecology are roads and rivers.
 
 #Lines can be loaded and set up manually as above with sp, but given a lot of this information will be provided to you
@@ -110,6 +112,35 @@ proj4string(elk_utm) == proj4string(pub_lands)
 plot(pub_lands)
 plot(pub_lands, axes = T, lwd = 2) ; plot(rivers, col = 'blue', axes=T, add=T) #plot our rivers and public lands
 
+#A quick note on projections...
+#Sometimes you'll be given a CSV file by someone and you won't know what projection it's in. In cases like
+#these it helps to know some common projections for your study site. You can check if you have the projection
+#right by plotting data over a world map in the same projection.
+
+world <- readOGR('Countries_WGS84.shp')
+
+plot(world); plot(elk_data, add = T, col = 'red') #data should appear as a red cross in WY
+
+proj4string(world); proj4string(elk_data) #are these the same?
+
+#if data don't appear in the right place, the projection might be incorrect...
+
+#Exercise 2: Load the csv file 'elk_other_proj.csv', take a look at the coordinates in columns X and Y, 
+#what do you notice about them? Can you make them a spatial object, which projection do you need to assign
+#in order to get them to appear in the right place on the world map? Hint, you can either assign the projection
+#and convert to WGS84 to match the map, or reproject the map using spTransform(). What projections are
+#appropriate for this part of North America? (10 mins)
+
+#----------------------------------------------------------------------------------------------------------
+#Answer 2:
+elk_unk <- read.csv('elk_other_proj.csv')
+coordinates(elk_unk) <- ~ X + Y
+proj4string(elk_unk) <- CRS('+init=epsg:5070')
+world <- spTransform(world, CRS(proj4string(elk_unk)))
+plot(world, axes = T); plot(elk_unk, col = 'blue', add=T)
+#----------------------------------------------------------------------------------------------------------
+
+############################################################################################################
 #Common spatial functions#
 #So far we've seen how rgdal helps get spatial data in to R and sp provides methods and classes to handle 
 #the data once its there...
@@ -132,7 +163,7 @@ plot(elk_500m, lwd = 2, col = 'green'); plot(elk_utm[1:5,], col = 'blue', add = 
 gIntersects(elk_utm[1,], pub_lands, byid = T) #include argument byid=T to check each polygon
 pub_lands$SURFACE[gIntersects(elk_utm[1,], pub_lands, byid = T)] #returns the value of SURFACE at elk_utm[1,]
 
-#Exercise 2:
+#Exercise 3:
 #A common task is to measure the distance of each GPS location to a linear feature like a river. Running
 #gDistance(elk_utm, rivers, byid=T) would return an nrow(x) by nrow(y) matrix, and we aren't too bothered
 #about comparing each location to each point on every river (takes a long time on large layers!). 
@@ -158,9 +189,9 @@ diwedd <- Sys.time()
 amser <- diwedd-dechrau
 print(paste("Measurements took",round(diwedd-dechrau,2),attributes(amser)$units,sep = " "))
 
-#########################################################################################################
+#----------------------------------------------------------------------------------------------------------
 
-#Answer #2:
+#Answer 3:
 dechrau <- Sys.time()
 total <- length(elk_utm )
 pb <- txtProgressBar(min = 0, max = total, style = 3)
@@ -183,8 +214,9 @@ print(paste("Distance measurement took",round(diwedd-dechrau,2),attributes(amser
 
 head(elk_utm$dist_river)
 
-#############################################################################################################
+#----------------------------------------------------------------------------------------------------------
 
+############################################################################################################
 #SF#
 #As mentioned above, the sf package has many of sp's functionality, but has a couple of important advantages,
 #namely, that it is faster, works with tidyverse packages, and can combine different geometry types in 
@@ -260,7 +292,7 @@ print(paste("Measurements took",round(diwedd-dechrau,2),attributes(amser)$units,
 
 head(elk_sf) #values are the same, but its much faster (I hope!)
 
-
+############################################################################################################
 #Rasters#
 #So far we have concentrated on vector data; points, lines and polygons. A fourth and very important data
 #type is the raster. These are essentially 2D matrices that represent a grid of the earth's surface. For
@@ -332,7 +364,7 @@ plot(elk_sf['elevation'])
 plot(elk_sf$Date_Time, elk_sf$elevation, axes = T) #annual cycle of elk elevation
 
 
-#Exercise 3:
+#Exercise 4:
 #Using the functions in sf and raster, sample the mean elevation in each polygon and add it to the 
 #pub_lands_sf attribute table as 'mean_elev (10 mins)
 
@@ -340,10 +372,11 @@ plot(elk_sf$Date_Time, elk_sf$elevation, axes = T) #annual cycle of elk elevatio
 #what is the output type and structure? Look at the sapply function docs, how can we use it to get 
 #the mean for each polyon id back in to our polygon sf object?
 
-#Answer 3:
+#----------------------------------------------------------------------------------------------------------
+#Answer 4:
 lands_dem <- extract(sm_dem$wiggins_dem, pub_lands_sf)
 pub_lands_sf$mean_elev <- sapply(lands_dem, mean)
-
+#----------------------------------------------------------------------------------------------------------
 
 #This final bit of code makes an aesthetically pleasing map with contour lines and hillshade, feel free to
 #use it in your own work...
@@ -376,13 +409,14 @@ ggplot() +
 #Finally, our maps can be saved using the function ggsave()
 ggsave(filename = 'wiggins_dem_with_hill.png', plot = last_plot())
 
-#Exercise 4:
+#Exercise 5:
 #Using everything you've learned in this session, pick a new terrain metric (look at the docs) and 
 #sample it for each elk location. Then produce a map, including a dem basemap, hillshade, rivers and
 #scale bar and north arrows. Make it as aesthetically pleasing as possible using scale_fill_viridis_c() or
 #terrain.colors(). (15 mins)
 
-#Answer 4:
+#----------------------------------------------------------------------------------------------------------
+#Answer 5:
 tri <- terrain(dem$wiggins_dem, opt = "TRI")
 elk_sf$tri <- extract(tri, elk_sf)
 
@@ -399,3 +433,4 @@ ggplot() +
   #annotation_north_arrow(location = "bl", which_north = "true", 
   #                       style = north_arrow_fancy_orienteering) +
   theme_light()
+#----------------------------------------------------------------------------------------------------------
