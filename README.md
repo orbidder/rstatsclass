@@ -28,4 +28,4 @@ Planning and writing schedule:
 * Both J and O run through all seminars
 * Make sure tidy and sp functions are introduced in intro sessions
 
-![Class Schedule](schedule.png)
+![Class Schedule](schedule.PNG)
