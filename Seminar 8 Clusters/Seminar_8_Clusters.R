@@ -39,15 +39,22 @@ fix_r <- 3
 timezone_1 <- "America/Los_Angeles"
 timezone_2 <- "America/Argentina/San_Juan"
 
-centroids_df <- cluster_centroids_func(df = puma4T, stime = s_time, sdist = s_dist, 
-                                       fixr = fix_r, timezone1 = timezone_1, timezone2 = timezone_2)
 
+centroids_df <- cluster_centroids_func(df = puma4T, stime = s_time, sdist = s_dist, 
+                                        fixr = fix_r, timezone1 = timezone_1, timezone2 = timezone_2)
 points_df <- cluster_points_func(df = puma4T, stime = s_time, sdist = s_dist, 
-                                 fixr = fix_r, timezone1 = timezone_1, timezone2 = timezone_2)
+                                  fixr = fix_r, timezone1 = timezone_1, timezone2 = timezone_2)
 
 #Always look at the data to make sure they make sense
 head(centroids_df)
 puma4T[14:24,]
 head(points_df)
 
+centroids_df <- read.csv("/Users/justinesmith/Documents/UCB/Data/Puma_data/puma1_clusters.csv")
 
+centroids_df_inv<-centroids_df[complete.cases(centroids_df), ]
+cor(as.data.frame(centroids_df[,c(3:7,10)]))
+
+#try with points/time/night/bin interchanged
+pumamodel1<-glmer(killYN~points+actratio+(1|puma),
+                  family=binomial(link=logit),data=centroids_df)

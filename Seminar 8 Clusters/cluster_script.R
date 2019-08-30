@@ -5,7 +5,7 @@ cluster_centroids_func <- function(df, stime, sdist, fixr, timezone1, timezone2)
   timedif<- array(0,c(nrow(df),nrow(df)))
   for (i in 1:nrow(df)){
     for (j in 1:nrow(df)){
-      timearray[i,j] = as.numeric(difftime(df$timestamp[j],df$timestamp[i],units="days"))
+      timearray[i,j] = abs(as.numeric(difftime(df$timestamp[j],df$timestamp[i],units="days")))
       timedif[i,j] = ifelse(timearray[i,j]<=stime,1,0)                        
     }
   }
@@ -180,7 +180,7 @@ cluster_points_func <- function(df, stime, sdist, fixr, timezone1, timezone2){
   timedif<- array(0,c(nrow(df),nrow(df)))
   for (i in 1:nrow(df)){
     for (j in 1:nrow(df)){
-      timearray[i,j] = as.numeric(difftime(df$timestamp[j],df$timestamp[i],units="days"))
+      timearray[i,j] = abs(as.numeric(difftime(df$timestamp[j],df$timestamp[i],units="days")))
       timedif[i,j] = ifelse(timearray[i,j]<=stime,1,0)                        
     }
   }
@@ -253,8 +253,7 @@ cluster_points_func <- function(df, stime, sdist, fixr, timezone1, timezone2){
           centroid[b,1]=centroidtemp[a,1]
           centroid[b,2]=centroidtemp[a,2]
           for(k in 1:nrow(df)){
-            if(((timedif[i,k]==1)&(k!=i)&(k!=j))|((timedif[max(ID[b,]),k]==1)&(k!=j)&(k!=i))){
-              if(sqrt((centroidtemp[a,1]-df$x[k])^2+(centroidtemp[a,2]-df$y[k])^2)<sdist){
+            if(((C[i,k]==1)&(k!=i)&(k!=j))|((C[max(ID[b,]),k]==1)&(k!=j)&(k!=i))){
                 a=a+1
                 centroidtemp[a,1]=(a*centroidtemp[(a-1),1]+df$x[k])/(a+1)#weighted average
                 centroidtemp[a,2]=(a*centroidtemp[(a-1),2]+df$y[k])/(a+1)
@@ -262,7 +261,6 @@ cluster_points_func <- function(df, stime, sdist, fixr, timezone1, timezone2){
                 centroid[b,2]=as.numeric(centroidtemp[a,2])
                 ID[b,a+1]=k
                 excess[k]=1
-              }
             }
           }
           cluster=nnzero(ID[b,])
