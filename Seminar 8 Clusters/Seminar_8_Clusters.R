@@ -7,6 +7,7 @@ library(sf)
 library(lubridate)
 library(rgeos)
 library(StreamMetabolism)
+library(caret)
 
 #We are selecting only Puma ID = 4 today to examine one puma's clusters
 puma4 <- read_csv("/Users/justinesmith/Documents/UCB/Data/Puma_data/puma_data 3hr2.csv") %>% 
@@ -50,11 +51,104 @@ head(centroids_df)
 puma4T[14:24,]
 head(points_df)
 
+
+
+#-----------------
+# Predict kills from investigated clusters and GPS data
+
 centroids_df <- read.csv("/Users/justinesmith/Documents/UCB/Data/Puma_data/puma1_clusters.csv")
 
 centroids_df_inv<-centroids_df[complete.cases(centroids_df), ]
 cor(as.data.frame(centroids_df[,c(3:7,10)]))
 
-#try with points/time/night/bin interchanged
-pumamodel1<-glmer(killYN~points+actratio+(1|puma),
-                  family=binomial(link=logit),data=centroids_df)
+# Now, use what you learned from fitting an RSF model to fit a
+#   kill prediction model (also a mixed-effects binomial logistic regression model)
+# Assess how to include correlated variables, write your candidate models, 
+#   and perform model selection by comparing AIC values
+
+pumamodel1<-
+
+pumamodel2<-
+  
+pumamodel3<-
+
+  
+# Time to see how accurate our best model is! 
+# For this, we will use bootstrapping cross-validation
+# First, we set a seed so our results are reproducible
+set.seed(6)
+
+# Then, we decide on a number of simulations we want to perform
+n.sim = 100
+
+# Next, make a new dataframe for testing the model and 
+#   create an empty dataframe to keep track of your results
+traintest<-centroids_df_inv
+kfold.kills<-data.frame(matrix(vector(), n.sim, 1,
+                               dimnames=list(c(), c("accuracy"))),
+                        stringsAsFactors=F)
+
+# Now for the simulation. We will fit the model to some of the data and see how 
+#   well the model predicts the remaining data
+for (i in 1:n.sim){
+  #First, split your data into two dataframes, one with 80% of the data for training
+  #   and one with 20% for testing
+  inTrain <- createDataPartition(y=traintest$killYN, p=0.8, list=FALSE)
+  training <- traintest[inTrain,]
+  testing <- traintest[-inTrain,]
+  # Write out your best model below to fit using the training data
+  test.model<-glmer(killYN~points+actratio+(1|puma),family=binomial,data=training)
+  # Next, predict the testing data with the model fit from the training data
+  # To predict binomial data, make sure to include type="response" in your command
+  predict1<-predict(test.model,testing,type="response")
+  # We also need to examine the fit of the training data to the model output 
+  PM<-predict(test.model,training,type="response")
+  target_pred<-as.matrix(PM)
+  target_class<-as.matrix(as.factor(training$killYN))
+  # To determine the optimal cutoff to distinguish a kill between 0 and 1, 
+  #   we calculate the false positive rate (1 - specificity) and 
+  #   the true positive rate (sensitivity)
+  pred<-prediction(target_pred,target_class)
+  perf<-performance(pred,"tpr","fpr")
+  fpr = perf@x.values[[1]] 
+  tpr = perf@y.values[[1]] 
+  sum = tpr + (1-fpr) 
+  index = which.max(sum) 
+  # We use the FPR and TPR to find the optimal cutoff for the test model
+  cutoff = perf@alpha.values[[1]][[index]] 
+  # Then we can assign our model output values to be kills (1) or not (0)
+  predict2<-ifelse(predict1>cutoff,1,0)
+  # Finally, we summarize the results by assessing the accuracy of the 
+  #   model predictions in the testing dataset
+  confM<-confusionMatrix(as.factor(predict2), as.factor(testing$killYN))
+  kfold.kills$accuracy[i]<-confM$overall[1]
+}
+# Calculate the mean overall accuracy from our cross-validation simulations
+mean(kfold.kills$accuracy)
+
+# Now let's look at a confusion matrix from our last simulation. 
+# What do the Sensitivity (TPR) and Specificity (TNR) tell us about our data?
+# Are we more likely to falsy call a real empty cluster a kill, 
+#   or a real kill an empty cluster?
+confM
+
+# Let's now identify the best cutoff for our full investigated dataset 
+#   to apply to our uninvestigated clusters
+PM <- fitted(pumamodel1)
+target_pred <- as.matrix(PM)
+target_class <- as.matrix(as.factor(centroids_df_inv$killYN))
+pred <- prediction(target_pred,target_class)
+perf <- performance(pred,"tpr","fpr")
+fpr <- perf@x.values[[1]] 
+tpr <- perf@y.values[[1]] 
+sum <- tpr + (1-fpr) 
+index <- which.max(sum) 
+cutoff <- perf@alpha.values[[1]][[index]] 
+cutoff
+
+# Predict model output for uninvestigated clusters
+centroids_df$predictkill<-predict(pumamodel1,newdata=centroids_df,
+                        type="response",allow.new.levels=T)
+
+# And apply our optimal cutoff to the predicted values
+centroids_df$modkillYN<-ifelse(centroids_df$predictkill>cutoff,1,0)
