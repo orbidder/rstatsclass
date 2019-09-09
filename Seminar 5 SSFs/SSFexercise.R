@@ -4,8 +4,9 @@ library(amt)
 library(sf)
 library(dplyr)
 library(tidyverse)
+library(survival)
 
-envtrasters <- stack("/Users/justinesmith/Documents/UCB/Data/Rasters/SGNP_all_stack_south_crop.tif") 
+envtrasters <- stack("/Users/justinesmith/Documents/UCB/Data/Rasters/SGNP_all_stack_south.tif") 
 names(envtrasters) <- c("aspect", "dem", "rough",  "slope",  "tri", "max_ndvi")
 
 read_csv("/Users/justinesmith/Documents/UCB/Data/Puma_data/puma_data 3hr2.csv") %>% 
@@ -118,9 +119,9 @@ ssfdat %>% mutate(elev.s = scale(dem),
                   log_sl = log(sl_)) -> ssfdat
 
 # Write out your candidate models
-m0 <- clogit(case_ ~ elev.s + tri.s + ndvi.s + strata(step_id_),method = "efron", robust = TRUE, data = ssfdat)
-m1 <- clogit(case_ ~ elev.s + + tri.s + ndvi.s + elev.s:cos_ta + elev.s:log_sl + log_sl * cos_ta + strata(step_id_), method = "efron", robust = TRUE, data = ssfdat)
-m2 <- clogit(case_ ~ elev.s + + tri.s + ndvi.s + elev.s:cos_ta + elev.s:log_sl + log_sl + cos_ta + strata(step_id_), method = "efron", robust = TRUE, data = ssfdat)
+m0 <- clogit(case_ ~ elev.s + tri.s + ndvi.s + strata(step_id_),method = "efron", robust = TRUE, data = ssfdat, model = TRUE)
+m1 <- clogit(case_ ~ elev.s + + tri.s + ndvi.s + elev.s:cos_ta + elev.s:log_sl + log_sl * cos_ta + strata(step_id_), method = "efron", robust = TRUE, data = ssfdat, model = TRUE)
+m2 <- clogit(case_ ~ elev.s + + tri.s + ndvi.s + elev.s:cos_ta + elev.s:log_sl + log_sl + cos_ta + strata(step_id_), method = "efron", robust = TRUE, data = ssfdat, model = TRUE)
 
 summary(m0)
 summary(m1)
@@ -142,6 +143,15 @@ QIC.coxph(m0)
 QIC.coxph(m1)
 QIC.coxph(m2)
 
+
+# From hab package (in development)
+# https://github.com/basille/hab/blob/master/R/kfold.r
+kfold.CV <- kfold.coxph(m1, k = 5, nrepet = 10, jitter = FALSE,
+            reproducible = TRUE, details = FALSE)
+
+kfold.CV %>%
+  group_by(type) %>%
+  summarize(mean_cor = mean(cor))
 
 #__________********_________
 
@@ -186,3 +196,4 @@ ssf_coefs %>%
   theme_light()
 
 # Now that you can see the individual variation, what modifications might you make to our model?
+
