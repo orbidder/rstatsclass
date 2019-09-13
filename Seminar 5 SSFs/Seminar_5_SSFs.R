@@ -9,9 +9,9 @@ library(survival)
 envtrasters <- stack("/Users/justinesmith/Documents/UCB/Data/Rasters/SGNP_all_stack_south.tif") 
 names(envtrasters) <- c("aspect", "dem", "rough",  "slope",  "tri", "max_ndvi")
 
-read_csv("/Users/justinesmith/Documents/UCB/Data/Puma_data/puma_data 3hr2.csv") %>% 
+read_csv("Seminar 5 SSFs/puma_data_2015.csv") %>% 
   # First, select just the columns you need for the analysis
-  dplyr::select(ID = animals_id, 5:7) %>% 
+  dplyr::select(ID = animals_id, 6:8) %>% 
   # Then, make sure your date/times are in the correct time zone
   mutate(timestamp = lubridate::with_tz(ymd_hms(acquisition_time,tz="America/Los_Angeles"),"America/Argentina/San_Juan")) %>% 
   # Make a "track", which is used by package amt for movement analysis
@@ -153,6 +153,7 @@ kfold.CV %>%
   group_by(type) %>%
   summarize(mean_cor = mean(cor))
 
+
 #__________********_________
 
 # The global model is a good start, expecially if we think animals respond 
@@ -166,7 +167,9 @@ kfold.CV %>%
 fitted_ssf <- function(data){
   fit_issf(case_ ~ elev.s + tri.s + ndvi.s + strata(step_id_),method = "efron", robust = TRUE, data=data)
 }
-ssfdat %>%  group_by(id) %>% nest() %>% 
+ssfdat %>%  
+  filter(id!=3) %>%
+  group_by(id) %>% nest() %>% 
   mutate(mod = map(data, fitted_ssf)) -> m1
 
 # Package broom can help us tidy up out models into a tibble
@@ -182,8 +185,9 @@ ssf_coefs <- m1 %>%
   unnest(tidy) 
 
 # Just to make it a little more interesting, we can add the sex of the animals to our vizualization
-n.covs -> 3
-mutate(ssf_coefs, sex = c(rep(c("f","f","m","m","m","f","m","m","f"),each = n.covs))) -> ssf_coefs
+n.covs <- 3
+unique(m1$id)
+mutate(ssf_coefs, sex = c(rep(c("f","f","m","m","m","m"),each = n.covs))) -> ssf_coefs
 
 # Plot the coefficients!
 ssf_coefs %>% 
@@ -196,4 +200,6 @@ ssf_coefs %>%
   theme_light()
 
 # Now that you can see the individual variation, what modifications might you make to our model?
+
+# NOTE TO JUSTINE: Do we have time to go through coxme??
 

@@ -67,6 +67,7 @@ head(points_df,11)
 
 # Which cluster characteristics would you add to the cluster function?
 
+
 #__________********_________
 
 # For this next exercise, we will predict kills by modeling investigated clusters
@@ -91,6 +92,7 @@ table(centroids_df$killYN) #number of kills and non-kills among investigated clu
 #   get rid of rows with "NA" under the killYN column
 centroids_df %>%
   drop_na() -> centroids_df_inv
+
 
 #__________********_________
 
