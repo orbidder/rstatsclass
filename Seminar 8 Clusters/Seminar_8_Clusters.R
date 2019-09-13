@@ -6,29 +6,41 @@ library(lme4)
 library(sf)
 library(lubridate)
 library(rgeos)
-library(StreamMetabolism)
 library(caret)
 
-# We are selecting only Puma ID = 4 today to examine one puma's clusters
-puma4 <- read_csv("/Users/justinesmith/Documents/UCB/Data/Puma_data/puma_data 3hr2.csv") %>% 
+# Load up the GPS location data from one individual animal
+puma.data <- read_csv("Seminar 8 Clusters/puma_data_P4.csv") %>% 
   dplyr::select(ID = animals_id, 5:7) %>% 
-  filter(ID == 4) %>%
-  st_as_sf(., coords = 3:4, crs = "+init=epsg:4326") %>% 
-  st_transform("+init=epsg:32719") %>% 
-  mutate(timestamp = lubridate::with_tz(ymd_hms(acquisition_time,tz="America/Los_Angeles"),"America/Argentina/San_Juan"))
+  mutate(timestamp = lubridate::with_tz(ymd_hms(acquisition_time,tz="America/Los_Angeles"),"America/Argentina/San_Juan")) %>%
+  arrange(., timestamp)
+
+# figure out if each location is day or night
+puma.data %>% 
+  mk_track(., longitude, latitude, timestamp, crs = CRS("+init=epsg:4326")) %>% 
+  time_of_day() -> puma_track
+
+# Make sure the fix rate is consistent. 
+# This is essential if you have a variable fix rate. 
+# In this dataset, we have 3 hr, 1 hr, and 30 minute fixes
+# To compare, let's first see how many data rows we have
+nrow(puma_track)
+# Then, we resample our data based on the 3 hr fix rate
+puma_track %>% 
+  track_resample(rate = hours(3), tolerance = minutes(15)) -> puma_track
+# Are there fewer data points now?
+nrow(puma_track)
+
+# attach the day/night data to the original dataframe
+puma.data %>%
+  right_join(.,puma_track,by=c("timestamp" = "t_")) %>%
+  mutate(daynight = ifelse(tod_=="night",0,1)) %>%
+  dplyr::select(1:5,10) %>%
+  st_as_sf(., coords = 3:4, crs = "+init=epsg:4326") %>%
+  st_transform("+init=epsg:32719") -> puma.data
 
 # In the interest of time, let's only look at data collected in the winter of 2014
-puma4 %>%
-  filter(lubridate::month(timestamp) %in% 6:9,lubridate::year(timestamp)==2014) -> puma4T
-
-# First we need to find sunrise and sunset times by day and location 
-# The lat/longs should be chosen based on a representative location in your study area
-# Determine if each location is between sunrise and sunset (day = 1) or not (night = 0)
-puma4T %>%
-  rowwise() %>% 
-  mutate(sunrise = as.POSIXct(sunrise.set(-29.18351, -69.34985, timestamp)[1,1],origin="1970-01-01",format="%H:%M:%S",force_tz("America/Argentina/San_Juan")),
-         sunset = as.POSIXct(sunrise.set(-29.18351, -69.34985, timestamp)[1,2],origin="1970-01-01",format="%H:%M:%S",force_tz("America/Argentina/San_Juan")),
-         daynight = ifelse(timestamp<sunrise|timestamp>sunset,0,1)) -> puma4T
+puma.data %>%
+  filter(lubridate::month(timestamp) %in% 6:9,lubridate::year(timestamp)==2014) -> puma.data
 
 # Set the time (days) and distance (meters) windows, as well as the fix rate
 s_time <- 1.33
@@ -41,17 +53,17 @@ timezone_1 <- "America/Los_Angeles"
 timezone_2 <- "America/Argentina/San_Juan"
 
 # Now run the cluster function!
-centroids_df <- cluster_centroids_func(df = puma4T, stime = s_time, sdist = s_dist, 
+centroids_df <- cluster_centroids_func(df = puma.data, stime = s_time, sdist = s_dist, 
                                         fixr = fix_r, timezone1 = timezone_1, timezone2 = timezone_2)
 
 # For field work, you will likely also want the points associated with each cluster
-points_df <- cluster_points_func(df = puma4T, stime = s_time, sdist = s_dist, 
+points_df <- cluster_points_func(df = puma.data, stime = s_time, sdist = s_dist, 
                                   fixr = fix_r, timezone1 = timezone_1, timezone2 = timezone_2)
 
 # Always look at the data to make sure they make sense
 head(centroids_df)
-puma4T[13:25,]
-head(points_df)
+puma.data[13:25,]
+head(points_df,11)
 
 # Which cluster characteristics would you add to the cluster function?
 
