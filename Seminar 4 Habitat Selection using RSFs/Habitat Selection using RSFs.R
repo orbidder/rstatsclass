@@ -49,6 +49,7 @@ vicuna_ud <- adehabitatHR::kernelUD(as(vicuna, "Spatial"),
                                    grid = 450)
 vicuna_hr <- adehabitatHR::getverticeshr(vicuna_ud, 99)
 mapview(vicuna_hr)
+
 #Use below command instead to get unique home ranges by adding the id column
 vicuna_ud <- adehabitatHR::kernelUD(as(vicuna, "Spatial")[1],  
                                    grid = 450)
@@ -247,17 +248,13 @@ random.int.raw <- glmer(Used ~ NDVI + elev + tri + (1|ID),
 # When this happens, you have to instead convert the rasters to the scale of the centered and normalized covariates in the model for mapping
 # To do this, we'll revisit our scale parameters for our covariates
 
-elevscalelist
-triscalelist
-NDVIscalelist
-
 # Make a new raster stack with just the covariates in the model
 env.rasters <- stack(envtrasters[[6]], envtrasters[[2]], envtrasters[[5]])
 
 # Scale the covariates to be centered and normalized, based on the scale parameters from our model covariates
-env.rasters[[1]]<-(env.rasters[[1]]-0.1259511)/0.1152686
-env.rasters[[2]]<-(env.rasters[[2]]-3496.423)/65.54133
-env.rasters[[3]]<-(env.rasters[[3]]-1.946558)/1.896601
+env.rasters[[1]]<-(env.rasters[[1]]-NDVIscalelist$center)/NDVIscalelist$scale
+env.rasters[[2]]<-(env.rasters[[2]]-elevscalelist$center)/elevscalelist$scale
+env.rasters[[3]]<-(env.rasters[[3]]-triscalelist$center)/triscalelist$scale
 
 # Name the raster layers to match the model covariate names
 names(env.rasters) <- c("NDVI.scaled", "elev.scaled", "tri.scaled")

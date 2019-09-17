@@ -7,17 +7,19 @@ library(sf)
 library(lubridate)
 library(rgeos)
 library(caret)
+library(amt)
 
-# Load up the GPS location data from one individual animal
-puma.data <- read_csv("Seminar 8 Clusters/puma_data_P4.csv") %>% 
+read_csv("Seminar 5 SSFs/puma_data_2015.csv") %>% 
   dplyr::select(ID = animals_id, 5:7) %>% 
   mutate(timestamp = lubridate::with_tz(ymd_hms(acquisition_time,tz="America/Los_Angeles"),"America/Argentina/San_Juan")) %>%
-  arrange(., timestamp)
+  arrange(., ID, timestamp) %>%
+  filter(year(timestamp) == 2015) -> puma.data
 
 # figure out if each location is day or night
 puma.data %>% 
-  mk_track(., longitude, latitude, timestamp, crs = CRS("+init=epsg:4326")) %>% 
-  time_of_day() -> puma_track
+  mk_track(., longitude, latitude, id = ID, timestamp, crs = CRS("+init=epsg:4326")) %>% 
+  time_of_day() %>%
+  arrange(id,t_)-> puma_track
 
 # Make sure the fix rate is consistent. 
 # This is essential if you have a variable fix rate. 
@@ -25,47 +27,76 @@ puma.data %>%
 # To compare, let's first see how many data rows we have
 nrow(puma_track)
 # Then, we resample our data based on the 3 hr fix rate
-puma_track %>% 
-  track_resample(rate = hours(3), tolerance = minutes(15)) -> puma_track
+puma_track %>% group_by(id) %>% nest() %>% 
+  mutate(data = map(
+    data, ~ .x %>% 
+      track_resample(rate = hours(fix_r), tolerance = minutes(15)))) %>% unnest() -> puma_track
 # Are there fewer data points now?
 nrow(puma_track)
 
-# attach the day/night data to the original dataframe
+# Attach the day/night data to the original dataframe
 puma.data %>%
-  right_join(.,puma_track,by=c("timestamp" = "t_")) %>%
+  right_join(.,puma_track,by=c("timestamp" = "t_", "ID" = "id")) %>%
   mutate(daynight = ifelse(tod_=="night",0,1)) %>%
   dplyr::select(1:5,10) %>%
   st_as_sf(., coords = 3:4, crs = "+init=epsg:4326") %>%
   st_transform("+init=epsg:32719") -> puma.data
 
-# In the interest of time, let's only look at data collected in the winter of 2014
+# In the interest of time, let's only look at data collected in June and July of 2015
 puma.data %>%
-  filter(lubridate::month(timestamp) %in% 6:9,lubridate::year(timestamp)==2014) -> puma.data
+  filter(lubridate::month(timestamp) %in% 6:7,lubridate::year(timestamp)==2015) -> puma.data
 
 # Set the time (days) and distance (meters) windows, as well as the fix rate
 s_time <- 1.33
 s_dist <- 20
 fix_r <- 3
+npuma <- length(unique(puma.data$ID))
 
 # Specify the time zone the data are in (timezone_1) 
 #   and the time zone they should be in (timezone_2)
 timezone_1 <- "America/Los_Angeles"
 timezone_2 <- "America/Argentina/San_Juan"
 
-# Now run the cluster function!
-centroids_df <- cluster_centroids_func(df = puma.data, stime = s_time, sdist = s_dist, 
-                                        fixr = fix_r, timezone1 = timezone_1, timezone2 = timezone_2)
+source("Seminar 8 Clusters/cluster_script.R")
 
-# For field work, you will likely also want the points associated with each cluster
-points_df <- cluster_points_func(df = puma.data, stime = s_time, sdist = s_dist, 
-                                  fixr = fix_r, timezone1 = timezone_1, timezone2 = timezone_2)
+# Now run the cluster function!
+# This will give you a centroids csv file and a points csv file
+# If you only have one animal, you can just run the cluster and points functions outside of the loop
+centroids_df <- list()
+points_df <- list()
+for(j in 1:npuma){
+  puma.data %>% 
+    filter(ID == unique(puma.data$ID)[j]) -> subsetpuma
+  centroids_df[[j]] <- cluster_centroids_func(df = subsetpuma, stime = s_time, sdist = s_dist, 
+                                              fixr = fix_r, timezone1 = timezone_1, timezone2 = timezone_2)
+  centroids_df[[j]]$puma = unique(puma.data$ID)[j]
+  points_df[[j]] <- cluster_points_func(df = subsetpuma, stime = s_time, sdist = s_dist, 
+                                        fixr = fix_r, timezone1 = timezone_1, timezone2 = timezone_2)
+  points_df[[j]]$puma = unique(puma.data$ID)[j]
+}
+centroids_df<-data.frame(do.call(rbind,centroids_df))
+centroids_df<-subset(centroids_df,time>0)
+points_df<-data.frame(do.call(rbind,points_df))
 
 # Always look at the data to make sure they make sense
 head(centroids_df)
-puma.data[13:25,]
-head(points_df,11)
+puma.data[15:20,]
+head(points_df)
 
 # Which cluster characteristics would you add to the cluster function?
+
+# Save the data files
+write.csv(centroids_df, "clustercentroids.csv")
+write.csv(points_df, "clusterpoints.csv")
+
+# Save the shape files
+coordinates(centroids_df)<-~x+y
+crs(centroids_df) <- ("+init=epsg:32719")
+writeOGR(centroids_df,".","centroids_df",driver="ESRI Shapefile")
+
+coordinates(points_df)<-~x+y
+crs(points_df) <- ("+init=epsg:32719")
+writeOGR(points_df,".","points_df",driver="ESRI Shapefile")
 
 
 #__________********_________
@@ -73,8 +104,8 @@ head(points_df,11)
 # For this next exercise, we will predict kills by modeling investigated clusters
 #   and applying the model to uninvestigated clusters
 
-centroids_df <- read_csv("/Users/justinesmith/Documents/UCB/Data/Puma_data/puma_clusters_halfsubset.csv")%>% 
-  st_as_sf(., coords = 2:3, crs = "+init=epsg:32719") %>% 
+centroids_df <- read_csv("Seminar 8 Clusters/investigatedclusters.csv")%>% 
+  st_as_sf(., coords = 3:4, crs = "+init=epsg:32719") %>% 
   mutate(first = lubridate::ymd_hms(first,tz="America/Argentina/San_Juan"),
          last = lubridate::ymd_hms(last,tz="America/Argentina/San_Juan"),
          killYN = as.factor(killYN))
@@ -110,7 +141,7 @@ centroids_df_inv %>%
   geom_histogram() +
   facet_wrap(~key, scales = "free")
 
-cor(centroids_df_inv[,c(2:6,9)])
+cor(centroids_df_inv[,c(3:7,10)])
 
 # To vizualize these correlations in space, we can use package corrr
 library(corrr)
@@ -147,7 +178,7 @@ kfold.kills<-data.frame(matrix(vector(), n.sim, 1,
                         dimnames=list(c(), c("accuracy"))),
                         stringsAsFactors=F)
 
-# Now for the simulation. We will fit the model to some of the data and see how 
+# Now for the cross validation simulation. We will fit the model to some of the data and see how 
 #   well the model predicts the remaining data
 
 for (i in 1:n.sim){

@@ -6,12 +6,12 @@ library(dplyr)
 library(tidyverse)
 library(survival)
 
-envtrasters <- stack("/Users/justinesmith/Documents/UCB/Data/Rasters/SGNP_all_stack_south.tif") 
+envtrasters <- stack("Seminar 5 SSFs/SGNP_envt_covariates_stack.tif") 
 names(envtrasters) <- c("aspect", "dem", "rough",  "slope",  "tri", "max_ndvi")
 
 read_csv("Seminar 5 SSFs/puma_data_2015.csv") %>% 
   # First, select just the columns you need for the analysis
-  dplyr::select(ID = animals_id, 6:8) %>% 
+  dplyr::select(ID = animals_id, 5:7) %>% 
   # Then, make sure your date/times are in the correct time zone
   mutate(timestamp = lubridate::with_tz(ymd_hms(acquisition_time,tz="America/Los_Angeles"),"America/Argentina/San_Juan")) %>% 
   # Make a "track", which is used by package amt for movement analysis
@@ -21,80 +21,96 @@ read_csv("Seminar 5 SSFs/puma_data_2015.csv") %>%
   # Transform our latlongs into UTMs
   transform_coords(., CRS("+init=epsg:32719")) -> puma_tr1
 
-# Save the class of data for later!
+# Save the class of data for later
 trk.class<-class(puma_tr1)
 
-# With our track, we can calculate a number of movement parameters.
-# Here we are calculating the absolute direction of the step, the relative direction
-#   of the step, the step length, and the net squared displacement
-puma_tr1 %>% nest(-id) %>% 
-  mutate(dir_abs = map(data, direction_abs,full_circle=TRUE, zero="N"), 
-         dir_rel = map(data, direction_rel), 
-         sl = map(data, step_lengths),
-         nsd_ = map(data, nsd)) %>% unnest() -> puma_tr1
-
-# You might have noticed that the bearing covariates were in radians
-#   For ease of use, we'll turn them into degrees
-puma_tr1 %>%
-  mutate(dir_abs = as_degree(dir_abs),
-         dir_rel = as_degree(dir_rel)) -> puma_tr1
-
-# If we want to subset the data by year or month, or use time as an interacting
-#   term with a covariate in our model, we can add some columns for time into our track
-# When might you expect time to interact with a covariate?
-puma_tr1%>% 
-  mutate(
-    week = week(t_),
-    month = month(t_, label=TRUE), 
-    year = year(t_),
-    hour = hour(t_)) -> puma_tr1
-
-# You'll notice that now our data are not a track anymore
-class(puma_tr1)
-
-# So we need to change our tibble back to a track
-class(puma_tr1)<-trk.class
-
-# Check out the sampling rate of each of our study animals
-# Do the medians look about right? What do you notice about the max values?
-# Take a close look at the 3rd quartile. Which animals do you think have 
-#   lower fix success?
-summarize_sampling_rate_many(puma_tr1, id)
-
-# First, we can look at the distribution of our turning angles as a rose plot
-ggplot(puma_tr1, aes(x = dir_rel, y=..density..)) + geom_histogram(breaks = seq(-180,180, by=20))+
-  coord_polar(start = 0) + theme_minimal() + 
-  scale_fill_brewer() + ylab("Density") + ggtitle("Angles Direct") + 
-  scale_x_continuous("", limits = c(-180, 180), breaks = seq(-180, 180, by=20), 
-                     labels = seq(-180, 180, by=20))+
-  facet_wrap(~id)
-
-# Does the rose plot make your head spin? You can aslo look at turning angles as 
-#   a traditional histogram
-ggplot(puma_tr1, aes(x = dir_rel)) +  geom_histogram(breaks = seq(-180,180, by=20))+
-  theme_minimal() + 
-  scale_fill_brewer() + ylab("Count") + ggtitle("Angles Relative") + 
-  scale_x_continuous("", limits = c(-180, 180), breaks = seq(-180, 180, by=20),
-                     labels = seq(-180, 180, by=20))+facet_wrap(~id, scales="free")
-
-# We can also look at how movement parameters might differ between day and night
-# Here, we're looking at the log of step length
-# Why do we take the log of the step length? Modify the plot code to see!
-ggplot(puma_tr1, aes(x = tod_, y = log(sl))) + 
-  geom_boxplot()+geom_smooth()+facet_wrap(~id)
-
-
-# Next we eliminate steps that are longer than 3 hours apart, filter out bursts
-#   that only have one point, simulate steps from our distribution of step lengths
-#   and turn angles, and extract the covariates for each step. 
-#   All in one pipe!
+# Next we eliminate steps that are longer than 3 hours apart and filter out bursts
+#   that only have one point
 puma_tr1 %>% group_by(id) %>% nest() %>% 
   mutate(data = map(
     data, ~ .x %>% 
       # Eliminate steps longer than 3 hours
       track_resample(rate = hours(3), tolerance = minutes(15)) %>%
       # Eliminate bursts with fewer than 2 points
-      filter_min_n_burst(min_n = 2) %>% 
+      filter_min_n_burst(min_n = 2))) %>% unnest() -> ssfdat
+
+# Did we get rid of any locations?
+nrow(puma_tr1)
+nrow(ssfdat)
+
+# You'll notice that now our data are not a track anymore
+class(ssfdat)
+
+# So we need to change our tibble back to a track
+class(ssfdat)<-trk.class
+
+# With our track, we can calculate a number of movement parameters.
+# Here we are calculating the absolute direction of the step, the relative direction
+#   of the step, the step length, and the net squared displacement
+ssfdat %>% nest(-id) %>% 
+  mutate(dir_abs = map(data, direction_abs,full_circle=TRUE, zero="N"), 
+         dir_rel = map(data, direction_rel), 
+         sl = map(data, step_lengths),
+         nsd_ = map(data, nsd)) %>% unnest() -> ssfdat
+
+# You might have noticed that the bearing covariates were in radians
+#   For ease of use, we'll turn them into degrees
+ssfdat %>%
+  mutate(dir_abs = as_degree(dir_abs),
+         dir_rel = as_degree(dir_rel)) -> ssfdat
+
+# If we want to subset the data by year or month, or use time as an interacting
+#   term with a covariate in our model, we can add some columns for time into our track
+# When might you expect time to interact with a covariate?
+ssfdat%>% 
+  mutate(
+    week = week(t_),
+    month = month(t_, label=TRUE), 
+    year = year(t_),
+    hour = hour(t_)) -> ssfdat
+
+# Our data are not a track again!
+class(ssfdat)<-trk.class
+
+# Check out the sampling rate of each of our study animals
+# Do the medians look about right? What do you notice about the max values?
+# Take a close look at the means. Which animals do you think have 
+#   lower fix success?
+summarize_sampling_rate_many(ssfdat, id)
+
+# First, we can look at the distribution of our turning angles as a rose plot
+ggplot(ssfdat, aes(x = dir_rel, y=..density..)) + geom_histogram(breaks = seq(-180,180, by=20))+
+  coord_polar(start = 0) + theme_minimal() + 
+  scale_fill_brewer() + ylab("Density") + ggtitle("Angles Direct") + 
+  scale_x_continuous("", limits = c(-180, 180), breaks = seq(-180, 180, by=20), 
+                     labels = seq(-180, 180, by=20))+
+  facet_wrap(~id)
+
+# Does the rose plot make your head spin? You can also look at turning angles as 
+#   a traditional histogram
+ggplot(ssfdat, aes(x = dir_rel)) +  geom_histogram(breaks = seq(-180,180, by=20))+
+  theme_minimal() + 
+  scale_fill_brewer() + ylab("Count") + ggtitle("Angles Relative") + 
+  scale_x_continuous("", limits = c(-180, 180), breaks = seq(-180, 180, by=20),
+                     labels = seq(-180, 180, by=20))+facet_wrap(~id, scales="free")
+
+# Also check out the distribution of step lengths
+ggplot(ssfdat, aes(x = sl)) +  geom_histogram() + theme_minimal() + 
+  scale_fill_brewer() + ylab("Count") + ggtitle("Step Lengths") +
+  facet_wrap(~id, scales="free")
+
+# We can also look at how movement parameters might differ between day and night
+# Here, we're looking at the log of step length
+# Why do we take the log of the step length? Modify the plot code to see!
+ggplot(ssfdat, aes(x = tod_, y = log(sl))) + 
+  geom_boxplot()+geom_smooth()+facet_wrap(~id)
+
+
+# Next we simulate steps from our distribution of step lengths and turn angles, 
+#   and extract the covariates for each step. 
+ssfdat %>% group_by(id) %>% nest() %>% 
+  mutate(data = map(
+    data, ~ .x %>% 
       steps_by_burst() %>% 
       # Randomly sample 10 steps per real step
       random_steps(n = 10) %>% 
@@ -146,7 +162,11 @@ QIC.coxph(m2)
 
 # From hab package (in development)
 # https://github.com/basille/hab/blob/master/R/kfold.r
-kfold.CV <- kfold.coxph(m1, k = 5, nrepet = 10, jitter = FALSE,
+library(devtools)
+install_github("basille/hab")
+library(hab)
+
+kfold.CV <- kfold(m1, k = 5, nrepet = 10, jitter = FALSE,
             reproducible = TRUE, details = FALSE)
 
 kfold.CV %>%
@@ -187,7 +207,7 @@ ssf_coefs <- m1 %>%
 # Just to make it a little more interesting, we can add the sex of the animals to our vizualization
 n.covs <- 3
 unique(m1$id)
-mutate(ssf_coefs, sex = c(rep(c("f","f","m","m","m","m"),each = n.covs))) -> ssf_coefs
+mutate(ssf_coefs, sex = c(rep(c("m","f","f","f","m","m","m","f"),each = n.covs))) -> ssf_coefs
 
 # Plot the coefficients!
 ssf_coefs %>% 
