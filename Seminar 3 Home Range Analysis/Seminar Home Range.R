@@ -1,7 +1,7 @@
 #Seminar 3: Home Range Analysis
 #O. R. Bidder, July 2019#
 
-#Please install the following package while you read the introduction!#
+#Please install the following packages while you read the introduction!#
 library(adehabitatHR)
 library(sf)
 library(plyr)
