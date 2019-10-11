@@ -40,3 +40,12 @@ elk_conus <- elk_conus[,-1]
 colnames(elk_conus)[4] <- 'X'
 colnames(elk_conus)[5] <- 'Y'
 write.csv(elk_conus, 'elk_other_proj.csv')
+
+#Prep the elk data for exercise 2!
+
+elk_unk <- read.csv('elk_other_proj.csv')
+quantile(elk_unk$Y)
+plot(elk_unk$X, elk_unk$Y)
+elk_unk <- elk_unk[elk_unk$Y < 3390000,] #keep only points above 20 degrees Latitude
+write.csv(elk_unk, 'elk_other_proj.csv')
+
