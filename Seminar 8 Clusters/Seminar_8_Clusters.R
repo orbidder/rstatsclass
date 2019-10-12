@@ -13,9 +13,11 @@ read_csv("Seminar 5 SSFs/puma_data_2015.csv") %>%
   dplyr::select(ID = animals_id, 5:7) %>% 
   mutate(timestamp = lubridate::with_tz(ymd_hms(acquisition_time,tz="America/Los_Angeles"),"America/Argentina/San_Juan")) %>%
   arrange(., ID, timestamp) %>%
-  filter(year(timestamp) == 2015) -> puma.data
+  # In the interest of time, let's only look at data collected in June and July of 2015
+  filter(lubridate::month(timestamp) %in% 6:7) -> puma.data
 
-# figure out if each location is day or night
+# Make a track and figure out if each location is day or night
+# We need to make a track to make sure we eliminate extraneous fixes if there are multiple fix rates in the data
 puma.data %>% 
   mk_track(., longitude, latitude, id = ID, timestamp, crs = CRS("+init=epsg:4326")) %>% 
   time_of_day() %>%
@@ -30,21 +32,31 @@ nrow(puma_track)
 puma_track %>% group_by(id) %>% nest() %>% 
   mutate(data = map(
     data, ~ .x %>% 
-      track_resample(rate = hours(fix_r), tolerance = minutes(15)))) %>% unnest() -> puma_track
+      track_resample(rate = hours(3), tolerance = minutes(15)))) %>% unnest() -> puma_track
 # Are there fewer data points now?
 nrow(puma_track)
 
-# Attach the day/night data to the original dataframe
+# If you know that the fix rate is consistent then making a track is unnecesary
+# In that case, you can assign points to day/night using the maptools package
+# e.g.
+#puma.data %>%
+#  mutate(sunrise = sunriset(SpatialPoints(cbind(longitude,latitude), proj4string=CRS("+init=epsg:4326")), timestamp, direction="sunrise", POSIXct.out=TRUE)[,2],
+#         sunset = sunriset(SpatialPoints(cbind(longitude,latitude), proj4string=CRS("+init=epsg:4326")), timestamp, direction="sunset", POSIXct.out=TRUE)[,2],
+#         daynight = ifelse(timestamp>sunrise&timestamp<sunset,1,0)) -> puma.data
+
+# But, since we had variable fix rate and identified day/night from our track
+#    we must now attach the day/night data to the original dataframe
 puma.data %>%
+  # We attach the day/night covariate by joining by time and puma id
   right_join(.,puma_track,by=c("timestamp" = "t_", "ID" = "id")) %>%
+  # Then we make a new variable for day/night as a binary variable: 1 for day and 0 for night
   mutate(daynight = ifelse(tod_=="night",0,1)) %>%
+  # Because the join will add all columns from each tibble (many of which are duplicates)
+  #   we will select only the columns we want to keep
   dplyr::select(1:5,10) %>%
+  # Finally, we can transform our data to UTMs from latlongs
   st_as_sf(., coords = 3:4, crs = "+init=epsg:4326") %>%
   st_transform("+init=epsg:32719") -> puma.data
-
-# In the interest of time, let's only look at data collected in June and July of 2015
-puma.data %>%
-  filter(lubridate::month(timestamp) %in% 6:7,lubridate::year(timestamp)==2015) -> puma.data
 
 # Set the time (days) and distance (meters) windows, as well as the fix rate
 s_time <- 1.33
@@ -75,13 +87,14 @@ for(j in 1:npuma){
   points_df[[j]]$puma = unique(puma.data$ID)[j]
 }
 centroids_df<-data.frame(do.call(rbind,centroids_df))
+# Remove rows left over from merging overlapping clusters by subsetting by clusters with duration > 0
 centroids_df<-subset(centroids_df,time>0)
 points_df<-data.frame(do.call(rbind,points_df))
 
 # Always look at the data to make sure they make sense
 head(centroids_df)
-puma.data[15:20,]
-head(points_df)
+subset(points_df,ID==4&puma==1)
+puma.data[13:21,]
 
 # Which cluster characteristics would you add to the cluster function?
 
@@ -154,19 +167,19 @@ centroids_df_inv %>%
 # Now write out your candidate models and select the best model
 
 pumamodel1<-
-
-pumamodel2<-
   
-pumamodel3<-
-
-
-#__________********_________ 
+  pumamodel2<-
   
-# Time to see how accurate our best model is! 
-# For this, we will use bootstrapping cross-validation
+  pumamodel3<-
   
-# First, we set a seed so our results are reproducible
-set.seed(6)
+  
+  #__________********_________ 
+  
+  # Time to see how accurate our best model is! 
+  # For this, we will use bootstrapping cross-validation
+  
+  # First, we set a seed so our results are reproducible
+  set.seed(6)
 
 # Then, we decide on a number of simulations we want to perform
 n.sim = 100
@@ -175,7 +188,7 @@ n.sim = 100
 #   create an empty dataframe to keep track of your results
 traintest<-centroids_df_inv
 kfold.kills<-data.frame(matrix(vector(), n.sim, 1,
-                        dimnames=list(c(), c("accuracy"))),
+                               dimnames=list(c(), c("accuracy"))),
                         stringsAsFactors=F)
 
 # Now for the cross validation simulation. We will fit the model to some of the data and see how 
@@ -217,7 +230,7 @@ for (i in 1:n.sim){
   # Then we can assign our model output values to be kills (1) or not (0)
   predict2<-ifelse(predict1>cutoff,1,0)
   
-
+  
   # Finally, we summarize the results by assessing the accuracy of the 
   #   model predictions in the testing dataset
   confM<-confusionMatrix(as.factor(predict2), as.factor(testing$killYN))
@@ -246,7 +259,7 @@ confM
 
 # Predict model output for uninvestigated clusters
 centroids_df$predictkill<-predict(pumamodel1,newdata=centroids_df,
-                        type="response",allow.new.levels=T)
+                                  type="response",allow.new.levels=T)
 
 # And apply the optimal cutoff to the predicted values
 centroids_df$modkillYN<-ifelse(centroids_df$predictkill>cutoff,1,0)
@@ -261,6 +274,4 @@ table(centroids_df$modkillYN)
 #__________********_________
 # ACTIVITY: Use the environmental covariates in the Seminar 8 folder to fit an 
 #   RSF and and RSPF with your kill / no kill data
-
-
 
