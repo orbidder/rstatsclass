@@ -168,17 +168,17 @@ centroids_df_inv %>%
 
 pumamodel1<-
   
-  pumamodel2<-
+pumamodel2<-
   
-  pumamodel3<-
+pumamodel3<-
   
   
-  #__________********_________ 
+#__________********_________ 
+
+# Time to see how accurate our best model is! 
+# For this, we will use bootstrapping cross-validation
   
-  # Time to see how accurate our best model is! 
-  # For this, we will use bootstrapping cross-validation
-  
-  # First, we set a seed so our results are reproducible
+# First, we set a seed so our results are reproducible
   set.seed(6)
 
 # Then, we decide on a number of simulations we want to perform
