@@ -243,6 +243,10 @@ now()
 # Let's revisit our vicuna data, where "acquisition_time" is the time of the GPS location
 vicuna %>%
   select(4:7) -> vicuna
+# Becasue we're only doing one command, this can actually be done without a pipe
+# e.g.
+# select(vicuna,4:7) -> vicuna
+# Here, I'm showing it as a pipe to help get used to the piping syntax
 
 # One of the truly mind-blowing things about lubridate is that it can handle multiple data formats at once
 #   As long as the parts of the date are in the right order!
@@ -315,9 +319,145 @@ tail(pm(vicuna$timestamp))
 # If we want to round our datetimes, we have a couple of options
 # Let's say seconds are just confusing us and we want them out
 # We can use round_date to get rid of them by rounding to the nearest minute, while keeping the same format
-vicuna %>%
-  mutate(timestamp = round_date(timestamp, unit = "minute"))
+mutate(vicuna,timestamp = round_date(timestamp, unit = "minute"))
 # OR we can get rid of the seconds altogether by reformatting the datetime
-vicuna %>%
-  mutate(timestamp = format(timestamp,format='%Y-%m-%d %H:%M'))
+mutate(vicuna,timestamp = format(timestamp,format='%Y-%m-%d %H:%M'))
+
+#__________********_________
+# ACTIVITY 1!
+# Make a tibble of GPS location data from only vicuna #23 for the month of February at 3 AM
+# See if you can do it in one line of code!
+# How many rows are there in your new tibble?
+
+# ACTIVITY 2!
+# Save a new tibble with added columns for year, week of year, and hour that only has April datetimes
+
+#__________********_________
+# Data visualization with ggplot
+
+# ggplot is your best friend for pretty visualizations!
+# For our ggplot exploration, we'll use existing datasets available in R
+data(mpg)
+# ggplot allows you to specify themes and color palettes to improve your aesthetics
+# You can also group by a factor to easily plot data from multiple groups on the same plot
+# Let's get started!
+
+# First, we need to get familiar with general ggplot syntax
+#  "+" is your key to adding lines to your plot code!
+# In ggplot we call the data first
+# We can either include the x and y in the initial command or as we add visualization types (e.g. points or lines)
+ggplot(data = mpg) + 
+  geom_point(aes(x = displ, y = hwy))
+ggplot(data = mpg, aes(x = displ, y = hwy)) + 
+  geom_point()
+
+# What if we want to plot by a factor? Again, we can add our variables up top or in geom_point
+ggplot(data = mpg) + 
+  geom_point(aes(x = displ, y = hwy, color = class))
+ggplot(data = mpg,aes(x = displ, y = hwy, color = class)) + 
+  geom_point()
+
+# We can also distinguish a factor by size...
+ggplot(data = mpg) + 
+  geom_point(aes(x = displ, y = hwy, size = class))
+# ...or shape...
+ggplot(data = mpg) + 
+  geom_point(aes(x = displ, y = hwy, shape = class))
+# ...or transparency. This makes the most sense to use if you have an ordinal factor
+ggplot(data = mpg) + 
+  geom_point(aes(x = displ, y = hwy, alpha = class))
+
+# To change the color off all points rather than by factor, take the color command out of the aes statement
+ggplot(data = mpg) + 
+  geom_point(aes(x = displ, y = hwy), color = "red")
+
+# **COLOR BREAK***
+# A note on color!
+# In r, you can use color names (e.g. "red") or hexadecimal RGB triplets (e.g. "#FFCC00")
+# There are also a number of color palettes available to you, through base, RColorBrewer,
+#   Viridis, or, my favorite, wesanderson
+# palettes can be one of three types:
+#   1. sequential: gradients that indicate high-to-low variables (e.g. temperature)
+#   2. diverging: gradients that diverge from a middle neutral point (e.g. temperature anomaly)
+#   3. qualitative: unrelated colors for nominal or categorical data (e.g. dog breed)
+
+# Let's try some palettes!
+library("RColorBrewer")
+display.brewer.all()
+library(viridis)
+library(wesanderson)
+
+#First, categorical/qualitative data
+# Base
+ggplot(data = mpg) + 
+  geom_point(aes(x = displ, y = hwy, color = class))
+ggplot(data = mpg) + 
+  geom_point(aes(x = displ, y = hwy, color = class)) +
+  scale_color_manual(values = c("blue", "red", "green","purple","black","chocolate1","coral3"))
+# R color brewer
+ggplot(data = mpg) + 
+  geom_point(aes(x = displ, y = hwy, color = class)) +
+  scale_color_brewer(palette = "Accent")
+ggplot(data = mpg) + 
+  geom_point(aes(x = displ, y = hwy, color = class)) +
+  scale_color_brewer(palette = "Pastel2")
+# wesanderson
+#   these palettes are so fun, but most only have 4-5 colors in them
+#   so to illustrate how to use wesanderson, we'll use a factor with fewer options, cyl
+ggplot(data = mpg) + 
+  geom_point(aes(x = displ, y = hwy, color = factor(cyl))) +
+  scale_color_manual(values = wes_palette("Moonrise2", n = 4))
+# Viridis
+#   these palettes are inherently continuous, but can be used by adding discrete = T
+#   generally, it can be misleading to use a continuous color palette for discrete data
+#   for categorial data, base/RColorBrewer/wesanderson will be better bets
+ggplot(data = mpg) + 
+  geom_point(aes(x = displ, y = hwy, color = class)) +
+  scale_color_viridis(discrete = T, option = "inferno")
+
+#Now, continuous data
+# Base
+#   in base, we have a number of palettes available including heat.colors, terrain.colors, and rainbow
+#   and custom gradients
+ggplot(data = mpg) + 
+  geom_point(aes(x = displ, y = hwy, color = cty))
+ggplot(data = mpg) + 
+  geom_point(aes(x = displ, y = hwy, color = cty)) +
+  scale_color_gradientn(colors = terrain.colors(10))
+ggplot(data = mpg) + 
+  geom_point(aes(x = displ, y = hwy, color = cty)) +
+  scale_color_gradient(low = "lightblue", high = "darkgreen")
+# RColorBrewer
+#   diverging
+ggplot(data = mpg) + 
+  geom_point(aes(x = displ, y = hwy, color = cty)) +
+  scale_color_gradientn(colors = brewer.pal(n = 3, name = "RdBu"))
+#   sequential
+ggplot(data = mpg) + 
+  geom_point(aes(x = displ, y = hwy, color = cty)) +
+  scale_color_gradientn(colors = brewer.pal(n = 3, name = "OrRd"))
+#wesanderson
+ggplot(data = mpg) + 
+  geom_point(aes(x = displ, y = hwy, color = cty)) +
+  scale_color_gradientn(colors = wes_palette("Zissou1", 100, type = "continuous"))
+#Viridis
+ggplot(data = mpg) + 
+  geom_point(aes(x = displ, y = hwy, color = cty)) +
+  scale_color_viridis(discrete = F, option = "magma", direction = -1)
+
+# That's it for colors for now! It's a bottomless hole you may never escape, 
+#   but it's also a lot of fun
+#-------***----------
+
+# Once we start using shapes other than the default, we have other commands we can consider
+# For example, if we use a shape with a border, we can use "stroke" to specify the border width
+ggplot(mpg, aes(x = displ, y = hwy)) +
+  geom_point(shape = 21, color = "darkorange4", fill = "#EEE8CD", size = 3, stroke = 2)
+# *** Try modifying the border color, fill, size, and stroke
+
+# You can also plot based on a factor with facet wrap
+ggplot(data = mpg) + 
+  geom_point(mapping = aes(x = displ, y = hwy)) + 
+  facet_wrap(~ class, nrow = 2)
+
 
