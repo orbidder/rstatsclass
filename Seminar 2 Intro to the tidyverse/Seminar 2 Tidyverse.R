@@ -2,14 +2,15 @@
 # These include:
 #   readr: the package that imports data into tibbles (enhanced dataframes)
 #     key commands: read_csv
-#   ggplot2: the data vizualization package
-#     key commands: ggplot
 #   tidyr: helps to create tidy data (whereby each variable is in its own column and each observation is in its own row)
 #     key commands: gather, spread
 #   dplyr: assists in data manipulation
 #     key commands: mutate, filter, summarise, arrange, select, *joins* 
 #   purrr: apply functions to lists or vectors
 #     key commands: map, nest, unnest
+#   ggplot2: the data vizualization package
+#     key commands: ggplot
+# We will also go over times and dates today with lubridate, which works well with tidy commands
 
 library(tidyverse)
 library(lubridate)
@@ -66,7 +67,7 @@ str(vicuna$acquisition_time)
 
 # It is always a good idea to look at your data and make sure it is formatted correctly before proceeding with analyses!
 # Look at histograms of your variables. Do they make sense? Are there weird outliers?
-# 
+#
 
 # -----------
 # Using tidyr - gather and spread
@@ -92,9 +93,11 @@ data_hr_tidy %>%
 # Time to get to know the dplyr commands! dplyr helps with data manipulation
 # Let's go back to our vicuna GPS tibble
 
+# FILTER
 # What if we want to only look at data from individual #16?
 filter(vicuna, animals_id==16)
 
+# SELECT
 # What if we only want to see certain columns from the tibble?
 select(vicuna,4:7)
 # Or exlude some columns specifically?
@@ -104,12 +107,14 @@ select(vicuna,4:7, vicunaID = animals_id)
 # Or, you can use "rename" to rename without selecting columns
 rename(vicuna, vicunaID = animals_id)
 
+# ARRANGE
 # What if we want to sort our data by a variable?
 # We can use a "-" to sort in decreasing order
 arrange(vicuna,-animals_id)
 # We can also sort by multiple variables
 arrange(vicuna,animals_id,-gps_data_animals_id)
 
+# MUTATE
 # Often we want to add new columns based on functions applied to other columns
 # For this, we use "mutate". mutate allows us to make multiple new columns in one command
 library(geosphere)
@@ -149,6 +154,21 @@ vicuna %>%
   filter(animals_id > 14)-> vicuna2
 
 vicuna2
+
+# SUMMARIZE
+# What if we want to know summary information about our data?
+summarize(vicuna, mean_dist = mean(hav.distance.to.first))
+# We can also use summarize to look at summary info by a factor
+summarize(group_by(vicuna, animals_id), mean_dist = mean(hav.distance.to.first))
+# Or we can make a new tibble with multiple summary columns
+summarize(group_by(vicuna,animals_id), 
+          count = n(),
+          mean_dist = mean(hav.distance.to.first),
+          sd_dist = sd(hav.distance.to.first),
+          se_dist = sd(hav.distance.to.first)/sqrt(n()),
+          upperse = mean_dist + se_dist,
+          lowerse = mean_dist - se_dist) -> summary_dist
+summary_dist
 
 #__________********_________
 # Activity!!
@@ -371,6 +391,17 @@ ggplot(data = mpg) +
 ggplot(data = mpg) + 
   geom_point(aes(x = displ, y = hwy), color = "red")
 
+# Once we start using shapes other than the default, we have other commands we can consider
+# For example, if we use a shape with a border, we can use "stroke" to specify the border width
+ggplot(mpg, aes(x = displ, y = hwy)) +
+  geom_point(shape = 21, color = "darkorange4", fill = "#EEE8CD", size = 3, stroke = 2)
+# *** Try modifying the border color, fill, size, and stroke
+
+# You can also plot based on a factor with facet wrap
+ggplot(data = mpg) + 
+  geom_point(mapping = aes(x = displ, y = hwy)) + 
+  facet_wrap(~ class, nrow = 2)
+
 # **COLOR BREAK***
 # A note on color!
 # In r, you can use color names (e.g. "red") or hexadecimal RGB triplets (e.g. "#FFCC00")
@@ -445,19 +476,58 @@ ggplot(data = mpg) +
   geom_point(aes(x = displ, y = hwy, color = cty)) +
   scale_color_viridis(discrete = F, option = "magma", direction = -1)
 
-# That's it for colors for now! It's a bottomless hole you may never escape, 
+# Lastly, let's talk themes
+# There are a lot of manual modifications you can do in ggplot in regard to axes, labels, background, etc.
+# But themes make it a lot more efficient to make the kind of plot you want
+# Here are a few to check out: theme_bw, theme_classic, theme_dark, theme_minimal
+#   Replace the theme command below with these to see how they look!
+ggplot(data = mpg) + 
+  geom_point(aes(x = displ, y = hwy, color = cty)) +
+  theme_classic()
+
+# That's it for colors and themes for now! It's a bottomless hole you may never escape, 
 #   but it's also a lot of fun
+# Things we didn't cover today: labels, legends, axes/scales 
+# If you are interested in learning more about customization, you can find a ton of information
+#   at https://ggplot2.tidyverse.org/index.html
 #-------***----------
 
-# Once we start using shapes other than the default, we have other commands we can consider
-# For example, if we use a shape with a border, we can use "stroke" to specify the border width
-ggplot(mpg, aes(x = displ, y = hwy)) +
-  geom_point(shape = 21, color = "darkorange4", fill = "#EEE8CD", size = 3, stroke = 2)
-# *** Try modifying the border color, fill, size, and stroke
+# We've been working with point data so far, but we might also want to plot summarized data
 
-# You can also plot based on a factor with facet wrap
+# One thing you might want to represent is how many records you have of different kinds of observations
+# This can be done by only setting an x and not a y with the geom_bar command
+ggplot(data = mpg, aes(x = class)) + 
+  geom_bar()
+# We can also look at how this breaks down by a second factor
 ggplot(data = mpg) + 
-  geom_point(mapping = aes(x = displ, y = hwy)) + 
-  facet_wrap(~ class, nrow = 2)
+  geom_bar(aes(x = class, fill = factor(year)), position = "dodge")
 
+# How are our data distributed within factor values? There are a few easy ways to look at this
+# Boxplots
+ggplot(data = mpg) + 
+  geom_boxplot(aes(x = class, y = hwy))
+# Violin plots
+ggplot(data = mpg) + 
+  geom_violin(aes(x = class, y = hwy))
+# Violin PLUS data mean with standard error
+ggplot(data = mpg,aes(x = class, y = hwy)) + 
+  geom_violin() + 
+  stat_summary()
+# We can also use geom_bar to illustrate means and standard errors, 
+#   but we have to calculate those values first
 
+# *** ACTIVITY ***
+# Use "summarize" to calculate the mean and standard errors of hwy ~ class from the mpg dataset
+# Make a new tibble with these values called hwyplot
+
+# Now we can make a barplot with means and error bars
+# To avoid geom_bar counting our data, we have to tell it to use the actual y value using stat = "identity"
+# Then we can add error bars using geom_errorbar
+ggplot(data = hwyplot,aes(x = class, y = meanhwy)) + 
+  geom_bar(stat = "identity") +
+  geom_errorbar(aes(ymin = meanhwy - sehwy, ymax = meanhwy + sehwy), width=0.2)
+
+# Bonus! Change the color palette of your plot to an RColorBrewer palette
+#   Change the theme to your theme of choice!
+# Hint: because we are using shapes (bars) rather than points/lines, use "fill" instead of "color" in the aes
+#   and use "scale_fill_brewer" rather than "scale_color_brewer"
