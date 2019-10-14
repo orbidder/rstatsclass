@@ -185,7 +185,7 @@ kfold.CV %>%
 # So let's fit individual SSFs to each of our animals.
 # To do this, we can apply the conditional logistic regression model to our nested data
 fitted_ssf <- function(data){
-  fit_issf(case_ ~ elev.s + tri.s + ndvi.s + strata(step_id_),method = "efron", robust = TRUE, data=data)
+  fit_issf(case_ ~ elev.s + tri.s*log_sl + ndvi.s + strata(step_id_),method = "efron", robust = TRUE, data=data)
 }
 ssfdat %>%  
   filter(id!=3) %>%
