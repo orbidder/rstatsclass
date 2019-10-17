@@ -14,16 +14,24 @@
 
 library(tidyverse)
 library(lubridate)
+library(data.table)
 
 # base::read.csv brings in your data as a dataframe
 vicuna <- read.csv("Seminar 4 RSFs/vicuna_data_2015.csv")
-
 class(vicuna)
 vicuna
 
+# data.table::fread creates a data.table
+# data.table is faster at processing very large datasets, and can also be used in tidy pipes
+vicuna <- fread("Seminar 4 RSFs/vicuna_data_2015.csv",sep=",")
+class(vicuna)
+vicuna
+# however, if you have to read in a large file but still want to work with a tibble, 
+#   you can just transform the data structure
+vicuna <- as_tibble(vicuna)
+
 # readr::read_csv creates a tibble, which works well with piping other tidyverse commands
 vicuna <- read_csv("Seminar 4 RSFs/vicuna_data_2015.csv")
-
 class(vicuna)
 vicuna
 
