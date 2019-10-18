@@ -12,6 +12,14 @@
 #     key commands: ggplot
 # We will also go over times and dates today with lubridate, which works well with tidy commands
 
+install.packages("tidyverse",dependencies=T)
+install.packages("lubridate",dependencies=T)
+install.packages("data.table",dependencies=T)
+install.packages("geosphere",dependencies=T)
+install.packages("RColorBrewer",dependencies=T)
+install.packages("viridis",dependencies=T)
+install.packages("wesanderson",dependencies=T)
+
 library(tidyverse)
 library(lubridate)
 library(data.table)
@@ -263,7 +271,6 @@ df
 # It's all about knowing what format and time zone your data are in
 #   and knowing how to transform them into the format and time zone you want
 # We will be very dependent on the package lubridate for all of our time needs
-library(lubridate)
 
 # First, just for fun...what time is it?
 now()
@@ -421,7 +428,7 @@ ggplot(data = mpg) +
 #   3. qualitative: unrelated colors for nominal or categorical data (e.g. dog breed)
 
 # Let's try some palettes!
-library("RColorBrewer")
+library(RColorBrewer)
 display.brewer.all()
 library(viridis)
 library(wesanderson)
