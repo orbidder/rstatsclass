@@ -17,10 +17,10 @@ vicuna <- read_csv("Seminar 4 RSFs/vicuna_data_2015.csv") %>%
   mutate(timestamp = force_tz(acquisition_time,tz="America/Argentina/San_Juan"))
 
 envtrasters <- stack("Seminar 4 RSFs/vicuna_envt_layers.tif")
-names(envtrasters) <- c("aspect", "dem", "rough",  "slope",  "tri", "max_ndvi")
+names(envtrasters) <- c("dem","slope","tri","max_ndvi")
 
 # Visualize environmental layers to make sure they make sense
-NDVI.raster <- as.data.frame(envtrasters[[6]], xy = TRUE)
+NDVI.raster <- as.data.frame(envtrasters[[4]], xy = TRUE)
 ggplot() +
   geom_raster(data = NDVI.raster, aes(x = x, y = y, fill = max_ndvi)) +
   scale_fill_viridis_c() +
@@ -78,10 +78,10 @@ availables %>%
 
 # Scale and center environmental covariates. 
 # Scaling covariates allows to to compare the relative strength of each variable by looking at the coefficient values alone
-vicuna_all %>% mutate(NDVI = raster::extract(envtrasters[[6]], as(., "Spatial")),
-                     elev = raster::extract(envtrasters[[2]], as(., "Spatial")),
-                     slope = raster::extract(envtrasters[[4]], as(., "Spatial")),
-                     tri = raster::extract(envtrasters[[5]], as(., "Spatial")),
+vicuna_all %>% mutate(NDVI = raster::extract(envtrasters[[4]], as(., "Spatial")),
+                     elev = raster::extract(envtrasters[[1]], as(., "Spatial")),
+                     slope = raster::extract(envtrasters[[2]], as(., "Spatial")),
+                     tri = raster::extract(envtrasters[[3]], as(., "Spatial")),
                      NDVI.scaled = scale(NDVI, center = TRUE, scale = TRUE),
                      elev.scaled = scale(elev, center = TRUE, scale = TRUE),
                      slope.scaled = scale(slope, center = TRUE, scale = TRUE),
@@ -248,7 +248,7 @@ random.int.raw <- glmer(Used ~ NDVI + elev + tri + (1|ID),
 envtrasters <- crop(envtrasters,extent(vicuna_hr))
 
 #...and make a new raster stack with just the covariates in the model
-env.rasters <- stack(envtrasters[[6]], envtrasters[[2]], envtrasters[[5]])
+env.rasters <- stack(envtrasters[[4]], envtrasters[[1]], envtrasters[[3]])
 
 # Scale the covariates to be centered and normalized, based on the scale parameters from our model covariates
 env.rasters[[1]]<-(env.rasters[[1]]-NDVIscalelist$center)/NDVIscalelist$scale

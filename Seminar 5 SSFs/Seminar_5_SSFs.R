@@ -6,8 +6,9 @@ library(dplyr)
 library(tidyverse)
 library(survival)
 
-envtrasters <- stack("Seminar 5 SSFs/SGNP_envt_covariates_stack.tif") 
-names(envtrasters) <- c("aspect", "dem", "rough",  "slope",  "tri", "max_ndvi")
+raster_files <- list.files("Seminar 5 SSFs/",full.names = T,pattern = '.tif$') 
+envtrasters <- stack(raster_files) 
+names(envtrasters) <- c("dem", "slope",  "tri", "max_ndvi")
 
 read_csv("Seminar 5 SSFs/puma_data_2015.csv") %>% 
   # First, select just the columns you need for the analysis
