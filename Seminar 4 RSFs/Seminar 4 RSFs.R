@@ -16,7 +16,7 @@ vicuna <- read_csv("Seminar 4 RSFs/vicuna_data_2015.csv") %>%
   st_transform("+init=epsg:32719") %>% 
   mutate(timestamp = force_tz(acquisition_time,tz="America/Argentina/San_Juan"))
 
-envtrasters <- stack("Seminar 5 SSFs/SGNP_envt_covariates_stack.tif")
+envtrasters <- stack("Seminar 4 RSFs/vicuna_envt_layers.tif")
 names(envtrasters) <- c("aspect", "dem", "rough",  "slope",  "tri", "max_ndvi")
 
 # Visualize environmental layers to make sure they make sense
