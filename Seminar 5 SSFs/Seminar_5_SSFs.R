@@ -6,8 +6,8 @@ library(dplyr)
 library(tidyverse)
 library(survival)
 
-raster_files <- list.files("Seminar 5 SSFs/",full.names = T,pattern = '.tif$') 
-envtrasters <- stack(raster_files) 
+raster_files <- list.files("Seminar 5 SSFs/",pattern = ".tif") 
+envtrasters <- raster::stack(paste0("Seminar 5 SSFs/", raster_files))
 names(envtrasters) <- c("dem", "slope",  "tri", "max_ndvi")
 
 read_csv("Seminar 5 SSFs/puma_data_2015.csv") %>% 
