@@ -1,4 +1,11 @@
-#load packages
+# Today we'll be doing some basic habitat selection analyses by fitting resource selection functions (RSFs)
+# Because animal movement data only gives us used (and non unused) locatations, we generally can't
+#   fit resource selection probability functions, or RSPFs. 
+# However, by randomly sampling available locations, we can approximate habitat selection with RSFs.
+# We will go through how to sample available locations and model habitat selection today using 
+#   GPS data from vicuñas.
+
+# First, load the packages that you will be using
 library(raster)
 library(lme4)
 library(sf)
@@ -9,15 +16,36 @@ library(lubridate)
 library(rgeos)
 library(rgdal)
 
-# Read in, clean, and project all your data
+# Read in, clean, and project all your data - in a single pipe!
+# use read_csv to bring in data
 vicuna <- read_csv("Seminar 4 RSFs/vicuna_data_2015.csv") %>% 
+  # then select only the columns we need for analysis - animal ID, datetime, and coordinates
   dplyr::select(ID = animals_id, 5:7) %>% 
+  # then create an sf object by calling the coordinates columns
+  # it's very important that you know the coordinate reference system that your data are in!
   st_as_sf(., coords = 3:4, crs = "+init=epsg:4326") %>% 
+  # next, let's transform our latitude and longitude columns to UTMs
   st_transform("+init=epsg:32719") %>% 
+  # finally, we'll make a timestamp column with the correct time zone
+  # in this file, I've already corrected the time to be in Argentina hours, so we just need to assign the tz
   mutate(timestamp = force_tz(acquisition_time,tz="America/Argentina/San_Juan"))
 
+# Always check your data!
+vicuna
+
+# Now we can pull in our environmental data, which is in the form of a raster stack with 4 raster layers
+# Our environmental data include layer for digital elevation model (or dem, which is just elevation),
+#   slope, terrain ruggedness index (mean difference between a central pixel and its surrounding cells),
+#   and max NDVI from 2015 (normalized difference vegetation index, or a measure of greenness)
 envtrasters <- stack("Seminar 4 RSFs/vicuna_envt_layers.tif")
 names(envtrasters) <- c("dem","slope","tri","max_ndvi")
+
+# Let's look at the structure of the data
+envtrasters
+
+# Do our coordinate reference systems for the vicuña GPS data and the environmental layers match?
+crs(envtrasters)
+crs(vicuna)
 
 # Visualize environmental layers to make sure they make sense
 NDVI.raster <- as.data.frame(envtrasters[[4]], xy = TRUE)
@@ -26,58 +54,76 @@ ggplot() +
   scale_fill_viridis_c() +
   coord_sf()
 
-# Keep in mind temporal effects!
-# RSF may be a spatial analysis but if we think selection or availability may change over time, we must control for that in our models
-# We can control for time either via appropriate covariate inclusion, or simply by limiting our scope.
-# Let's say we only want to know how vicuñas select habitat in the winter (June - September)
+# You can also visualize all the layers at once in base R
+plot(envtrasters)
 
+# Keep in mind temporal effects!
+# RSF may be a spatial analysis but if we think selection or availability may change over time, 
+#   we should consider that in our modeling approach
+# We can control for time either via appropriate covariate inclusion, or simply by limiting our scope.
+# Let's say we only want to know how vicuñas select habitat in the winter (June - September), for example
+
+# We can use a pipe to filter by winter months
 vicuna %>% 
+  # filter by months June - Sept
   filter(lubridate::month(timestamp) %in% 6:9) %>% 
+  # get rid of extraneous time column
   dplyr::select(-acquisition_time) %>%
+  # make a new column to show that these are real GPS data from collared vicuñas
   mutate(Used = 1) -> vicuna
 
-# Choosing an available range. 
-#conservative option - 99% UD
-#Use below command to draw from range of all vicuna locations
-vicuna_ud <- adehabitatHR::kernelUD(as(vicuna, "Spatial"), 
-                                   grid = 450)
-vicuna_hr <- adehabitatHR::getverticeshr(vicuna_ud, 99)
-mapview(vicuna_hr)
-
-#Use below command instead to get unique home ranges by adding the id column
+# Choosing an available range
+# A conservative option is to use a 99% KUD (kernel utilization distribution)
+# We can also use a 95% KUD if we want to make sure to focus on areas used more frequently by individuals
+# To get unique home ranges, we'll use the kernel density estimation that you learned in Seminar 2
 vicuna_ud <- adehabitatHR::kernelUD(as(vicuna, "Spatial")[1],  
                                    grid = 450)
-vicuna_hr <- adehabitatHR::getverticeshr(vicuna_ud, 99)
+vicuna_hr <- adehabitatHR::getverticeshr(vicuna_ud, 95)
 
-# Visualize individual home ranges
-homerange <- mapview(vicuna_hr)
-homerange
+# Check out how the home ranges stack onto the dem layer
+mapview(envtrasters[[2]]) + mapview(vicuna_hr[1])
+# Or visualize individual home ranges on the NDVI layer
+mapview(envtrasters[[4]]) + mapview(vicuna_hr[18,1])
+
 
 #--------
-# Sample available points within each home range. 
+# Now that we have created our home ranges, we can sample available points within each home range. 
 
 # First, determine how many points to sample in each home range. 
-# Here we will calculate a 1:1 or 10:1 ratio of available:used points and randomly sample the available points from the population or individual UDs
+# Here we will calculate a 1:1 or 10:1 ratio of available:used points and randomly sample the available points from the individual UDs
 
-vicuna_ids <- unique(vicuna$ID)
+# Extract a list of vicuña IDs
+print(vicuna_ids <- unique(vicuna$ID))
+# Make an empty list to store your new locations by individual vicuña
 availables <- list()
+
+# Randomly sample points from within the home range of each individual according to your chosen ratio
 for(i in 1:length(vicuna_ids)){
-  st_sample(st_as_sf(vicuna_hr)[i,], nrow(filter(vicuna, ID == vicuna_ids[i]))) %>% # e.g. 1:1 ratio; sample individual UDs
-    #st_sample(st_as_sf(vicuna_hr), 10*nrow(filter(vicuna, ID == vicuna_ids[i])))  %>%  # e.g. 1:10 ratio; sample population UD
+  st_sample(st_as_sf(vicuna_hr)[i,], nrow(filter(vicuna, ID == vicuna_ids[i]))) %>% # e.g. 1:1 ratio
+    #st_sample(st_as_sf(vicuna_hr)[i,], 10*nrow(filter(vicuna, ID == vicuna_ids[i])))  %>%  # e.g. 1:10 ratio
     st_sf(geometry = .) %>%
+    # We'll save the list with columns that match our available data, including a "Used" column populated with zeroes
     mutate(ID = vicuna_ids[i], 
            timestamp = NA, 
            Used = 0) -> availables[[i]] 
 }
 
+# Then combine individual lists into one data.frame and combine it with the real vicuña GPS points
 availables %>% 
   do.call(rbind,.) %>%
   rbind(vicuna, .) -> vicuna_all
 
+# Do we have a 1:1 ratio of used:available?
+table(vicuna_all$ID,vicuna_all$Used)
+
 #--------
 
-# Scale and center environmental covariates. 
-# Scaling covariates allows to to compare the relative strength of each variable by looking at the coefficient values alone
+# Next we have to extract environmental covariates and process them for analysis
+# We will use raster::extract to get environmental values for each used and available location
+# We will also scale and center environmental covariates
+# There are two main reasons to scale covariates:
+#   1. it allows to to compare the relative strength of each variable by looking at the coefficient values alone
+#   2. sometimes if your variables are on really different scales, the model won't converge
 vicuna_all %>% mutate(NDVI = raster::extract(envtrasters[[4]], as(., "Spatial")),
                      elev = raster::extract(envtrasters[[1]], as(., "Spatial")),
                      slope = raster::extract(envtrasters[[2]], as(., "Spatial")),
@@ -85,10 +131,9 @@ vicuna_all %>% mutate(NDVI = raster::extract(envtrasters[[4]], as(., "Spatial"))
                      NDVI.scaled = scale(NDVI, center = TRUE, scale = TRUE),
                      elev.scaled = scale(elev, center = TRUE, scale = TRUE),
                      slope.scaled = scale(slope, center = TRUE, scale = TRUE),
-                     tri.scaled = scale(tri, center = TRUE, scale = TRUE)) %>% 
-  group_by(ID) -> vicuna_full
+                     tri.scaled = scale(tri, center = TRUE, scale = TRUE)) -> vicuna_full
 
-# Save your scale parameters - you'll need them later!
+# Save your scale parameters - you'll need them for plotting later!
 print(elevscalelist <- list(scale = attr(vicuna_full$elev.scaled, "scaled:scale"),center = attr(vicuna_full$elev.scaled, "scaled:center")))
 print(slopescalelist <- list(scale = attr(vicuna_full$slope.scaled, "scaled:scale"),center = attr(vicuna_full$slope.scaled, "scaled:center")))
 print(triscalelist <- list(scale = attr(vicuna_full$tri.scaled, "scaled:scale"),center = attr(vicuna_full$tri.scaled, "scaled:center")))
@@ -99,25 +144,27 @@ print(NDVIscalelist <- list(scale = attr(vicuna_full$NDVI.scaled, "scaled:scale"
 # Fitting the RSF
 
 # Always check the structure of the data
-head(vicuna_full)
-table(vicuna_full$Used) #check for 1:1 ratio
-table(vicuna_full$Used,vicuna_full$ID) #check for 1:1 ratio by individual
+# For example, look at the center parameter for NDVI.scaled. Are the values positive when NDVI is above that value?
+vicuna_full
 
-# First we need to check for colinearity. 
-# If two covariates are correlated, including them in the same model can overinflate their standard errors and make it appear that they are not good predictors (when they acutally might be!)  
+# When we run our model, we want to make sure that the animal ID is treated as a factor
+vicuna_full$ID <- as_factor(vicuna_full$ID)
+
+# Before we run any models, we need to check for colinearity among habitat covariates 
+# If two covariates are correlated, including them in the same model can overinflate their standard errors 
+#   and make it appear that they are not good predictors (when they acutally might be!)  
 # General practice is to not include two covariates for which r > 0.7 (or, conservatively, 0.5)
 vicuna_cor <- vicuna_full
 st_geometry(vicuna_cor) <- NULL
 cor(vicuna_cor[,c(4:7)])
 
-vicuna_full$ID <- as_factor(vicuna_full$ID)
+# Are any of our covariates correlated?
 
-# Population-level RSF (fixed effects only)
-# Let's compare the fit of slope and ruggedness to decide which one we want to include
-fixed.global <- glm(Used ~ NDVI.scaled + elev.scaled + slope.scaled, data=vicuna_full, family=binomial(link="logit"))
-summary(fixed.global)
-fixed.global <- glm(Used ~ NDVI.scaled + elev.scaled + tri.scaled, data=vicuna_full, family=binomial(link="logit"))
-summary(fixed.global)
+
+# As a first pass, let's fit a population-level RSF (using fixed effects only)
+# For example, we can compare the fit of slope and ruggedness to decide which one we want to include
+summary(fixed.global <- glm(Used ~ NDVI.scaled + elev.scaled + slope.scaled, data=vicuna_full, family=binomial(link="logit")))
+summary(fixed.global <- glm(Used ~ NDVI.scaled + elev.scaled + tri.scaled, data=vicuna_full, family=binomial(link="logit")))
 
 # Does slope or ruggedness improve model fit more?
 
@@ -125,7 +172,10 @@ summary(fixed.global)
 # i.e. an RSF that accounts for variation among individuals
 
 #---------
-# BREAK - random effects exercise!
+# BREAK - random effects exercise! 
+
+# First: what are random effects??
+
 
 # Let's explore how random effects alter model shape
 # To do this, we'll vary the slope and intercept of a logistic regression model and visualize the differences
@@ -135,7 +185,7 @@ fake.data<-function(x,b,m){
   1/(1+exp(-(b + x*m)))
 }
 
-# Set up data
+# Set up fake data
 fakem0.5<-rep(0.5,times=101)
 fakem1.5<-rep(1.5,times=101)
 fakem1<-rep(1,times=101)
@@ -166,7 +216,7 @@ points(fakeym1.5~fakex,ylim=c(0,1),col="red")
 # OK - back to the models!
 #---------
 
-# Random intercept
+# Random intercept model
 # Most common way to include a random effect
 # Addresses variation in sample sizes, moves logistic curve left and right
 random.int.global <- glmer(Used ~ NDVI.scaled + elev.scaled + tri.scaled + (1|ID), 
