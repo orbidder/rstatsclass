@@ -325,7 +325,12 @@ legend(0.4,0.4,c(minauct,"\n"),border="white",cex=1.7,box.col = "white")
 
 # How does our model look?
 
+# IMPORTANT NOTE ON CROSS-VALIDATION
 # This just shows us a first pass. We still need to do cross-validation to check our model fit
+# Cross-validation is a very important part of the modeling process
+# While selecting based on AIC tells you which of your candidate models is the best
+#   it doesn't tell you if your "best" model is actually a GOOD model!
+# We will go over cross-validation in Seminar 8
 
 
 #------------
