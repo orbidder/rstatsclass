@@ -9,6 +9,8 @@ library(move)
 library(ggplot2)
 library(imager)
 library(tidyverse)
+library(lubridate)
+setwd("~/rstatsclass/Seminar 3 Home Range Analysis")
 
 #Intro#
 #Burt (1943) defines a home range as "that area traversed by the animal during its normal activities of food
@@ -31,15 +33,17 @@ puma$acquisition_time <- as.POSIXct(puma$acquisition_time, "%Y-%m-%d %H:%S:%S", 
 #3. Convert puma from a data frame in to a SpatialPointsDataFrame ready for use in adehabitat. Use the head()
 #   function to look for which columns hold the coordinates. Do they look like they are in WGS84 or UTM 19S 
 #   projection? If WGS84, use the proj4string '+init=epsg:4326', if UTM 19S, use
-#   '+proj=utm +zone=19 +south +ellps=WGS84 +datum=WGS84 +units=m +no_defs'
+#   '+proj=utm +zone=19 +south +ellps=WGS84 +datum=WGS84 +units=m +no_defs' or '+init=epsg:32719'
 #(5 mins)
 
+#######################################################################################################
 #Ex1 Answer:
 colnames(puma) #what columns have we got?
 unique(puma$animals_id) #which animals have we got?
 head(puma)
 coordinates(puma) <- c("x","y")
 proj4string(puma) <- CRS('+proj=utm +zone=19 +south +ellps=WGS84 +datum=WGS84 +units=m +no_defs')
+#######################################################################################################
 
 #The adehabitatHR package gives us the mcp() function for calculating the MCP. It takes a spatialpointsdataframe
 #with coordinates in UTM meters, the percentage of points we want to use for computation of the MCP,
@@ -51,7 +55,7 @@ proj4string(puma) <- CRS('+proj=utm +zone=19 +south +ellps=WGS84 +datum=WGS84 +u
 #Minimum Convex Polygons
 mcp_all <- mcp(puma, percent = 95, unin = "m", unout = "km2") #an MCP calculated for all animals
 mcp_ind <- mcp(puma[,4], percent = 95, unin = "m", unout = "km2") #MCP for each animal in puma
-plot(mcp_ind); points(puma, col=puma$animals_id)
+plot(puma, col=puma$animals_id); lines(mcp_ind, lwd =4)
 
 #We can also work out the area of each MCP using mcp.area
 area <- mcp.area(puma[,4], percent = c(15:95), unin = "m", unout = "km2") 
@@ -61,22 +65,22 @@ mcp_ind$area #the areas are also stored as a vector in the mcp object
 
 #KUD#
 #Let's plot our MCPs again...
-plot(mcp_ind); points(puma, col=puma$animals_id) 
+plot(puma, col=puma$animals_id); lines(mcp_ind, lwd =4)
 
 #Throwing a rubber band around all of our points is a useful but primitive form of home-range estimation,
-#we see in our plot a lot of white space, meaning the area is in our MCP, but the animal never visited
+#we see in our plot a lot of white space, meaning that area is in our MCP, but the animal never visited
 #these sites! Hardly what Burt meant by "area traversed during normal activities"!
 
 #The next method, Kernel Utilization Distribution, is a more formal description of a home range, by using
 #a bivariate probability density function, the UD, which describes the probability that we will find
 #an animal in any given area. A neat visualization that is useful when conceptualizing the UD can be found
-#here; https://mathisonian.github.io/kde/
+#here; https://mathisonian.github.io/kde/ (5 mins)
 
 #A seminal paper on using KUD for animal movements is Worton (1989), you can find it in the folder
 #for this seminar.
 
 #The KUD can be calculated using adehabitat's kernelUD() function, which takes a spatialpointsdataframe,
-#the smoothing parameter h (see bandwidth in that animation above), as well as other arguements like
+#the smoothing parameter h (see bandwidth in that animation above), as well as other arguments like
 #'kern' that we can use to specify which kernel we want to use ("bivorm" is default).
 
 #The 'href' value for h calculates the 'reference bandwidth' and uses it for the KUD estimation, the
@@ -84,9 +88,11 @@ plot(mcp_ind); points(puma, col=puma$animals_id)
 #with sigma = 0.5 * (sigma_x + sigma_y)
 
 #This reference bandwidth is a quick shorthand for finding h, but assumes the true distribution is
-#bivariate normal, which is almost always not the case. The alternatives are h = "LSCV" to robustly find
-#h by least-square cross validation (slow) or by picking a value for h by subjective trial and error
-#(actually can give sensible results). For now, we will stick with 'href'...
+#bivariate normal, which is almost always not the case with animal movement data. 
+#The alternatives are h = "LSCV" to robustly find h by least-square cross validation (slow) 
+#or by picking a value for h by subjective trial and error (actually can give sensible results). 
+
+#For now, we will stick with 'href'...
 
 kud_all <- kernelUD(puma, h = 'href')
 kud_ind <- kernelUD(puma[,4], h = 'href')
@@ -124,17 +130,20 @@ plot(kud_contour); points(puma, col=puma$animals_id)
 
 #Exercise 2: It might be useful to plot each home range seperately, along with the points that produced them,
 #in order to assess each one. Write a for loop that runs through all the animals and plots each one.
-#Hint: I would do this in the following steps, 1) plot the first contour only by calling kud_contour[1,]
+#Hint: I would do this in the following steps;
+#1) plot the first contour only by calling kud_contour[1,]
 #2) use the points function to plot only the first animal's locations, you will need to slice puma by
-#the animals_id column 3) replace the number 1 with i, and index the loop for the number of pumas
-#we have. You will get bonus points if you can also write an appropriate title for each plot that tells us
+#the animals_id column 
+#3) replace the number 1 with i, and index the loop for the number of pumas we have. 
+#You will get bonus points if you can also write an appropriate title for each plot that tells us
 #which animal is plotted (try using the paste() function) (15 mins)
-
+########################################################################################################
 #Ex2 Answer:
 for (i in 1:3) {
   plot(kud_contour[i,], main = paste("KUD for Puma", unique(puma$animals_id)[i], sep = " "))
   points(puma[puma$animals_id == unique(puma$animals_id)[i],]) #plot one KUD at a time...
 }
+########################################################################################################
 
 #Notice this polygon contains a lot less white space than the MCP, and provides a more realistic description
 #of the home range. If you ever need to export your home range (or sp object in R), you can use the
@@ -147,7 +156,8 @@ writeOGR(kud_contour, "Puma_95_KUD.shp", driver = "ESRI Shapefile", layer = "pum
 #or the sequence of locations in any way. The next development in home ranges comes from the use of brownian
 #bridges, which place the bivariate kernel, not just over the locations, as with KUD, but also over the 
 #space between two sequential locations, to give the bridge. This gives an indication of the latent position of the
-#animal between positional fixes.
+#animal between positional fixes. I've put a paper by Horne et al. in the seminar folder that describes this
+#method in detail.
 
 #Let's pull in an example taken from the adehabitat manual...
 im<-load.image("BBMM_demo.PNG")
@@ -176,27 +186,35 @@ puma_ltraj <- as.ltraj(xy = data.frame("x" = puma$x, "y"=puma$y),
                        proj4string = CRS('+proj=utm +zone=19 +south +ellps=WGS84 +datum=WGS84 +units=m +no_defs'))
 
 #Let's search for the optimum sig1, assuming our GPS error is 60 m
+lik <- liker(puma_ltraj, sig2 = 60, rangesig1 = c(1, 40))
+lik # look at the sig values for each animal
+
 #Here's a for loop, going through each puma in puma_ltraj, finding the optimum sig1, which is stored in
 #an object called lik, and then calculating the kernelbb with that sig1 value
-lik <- liker(puma_ltraj, sig2 = 60, rangesig1 = c(1, 40)) #find the optimum sig_1
-bbmm_puma <- kernelbb(puma_ltraj, sig1 = lik[[1]]$sig1, sig2 = 60, grid = 50)#calculate the bbmm
+
+#We can then calculate the bbmm using kernelbb(), which takes an ltraj object, a sig1 value, sig2 value
+# and a grid similarly to kernelUD..
+bbmm_puma <- kernelbb(puma_ltraj, sig1 = lik[[1]]$sig1, sig2 = 60, grid = 50)
+
+#Notice here, we are calculating a bbmm for all animals in puma_ltraj...
 image(bbmm_puma)
 
-# Notice the sig1 value is different for each animal. So usually we'd have to pick a value to share
-#among all animals, OR we can write a loop that calculates the sig1 for each animal, calculates a 
-#bbmm, and combines the outputs in a list...
+#But we have used only the first sig1 value stored in lik (the output from the liker() function).
 
-#Exercise 3: Write another for loop that repeats these steps for the other 2 pumas, and places the
-#results in to the bbmm_puma object *HINT*: assign using the list notation bbmm_puma[[i]] <- kernelbb()
+#Notice the sig1 values in lik are different for each animal. So we can either pick a value to share
+#among all animals, OR we can write a loop that calculates a bbmm for each one using its own sig1
+#and combines the outputs in a list...
+
+#Exercise 3: Write another for loop that repeats these steps for the second and third pumas using their
+#own sig1 value from the lik object, and places the results in to the bbmm_puma object 
+#*HINT*: assign using the list notation bbmm_puma[[i]] <- kernelbb()
 #Answer 3:
-
-bbmm_puma <- list()
-for (i in 1:3) {
+#######################################################################################################
+for (i in 2:3) {
   print(paste('Calculating BBMM for animal: ',ld(puma_ltraj[i])$id[1], sep = ""))
-  lik <- liker(puma_ltraj[i], sig2 = 60, rangesig1 = c(1, 40)) #find the optimum sig_1
-  bbmm_puma[[i]] <- kernelbb(puma_ltraj[i], sig1 = lik[[1]]$sig1, sig2 = 60, grid = 50)#calculate the bbmm
-  bbmm_puma[[i]]$id <- ld(puma_ltraj[i])$id[1]
+  bbmm_puma[[i]] <- kernelbb(puma_ltraj[i], sig1 = lik[[i]]$sig1, sig2 = 60, grid = 50)#calculate the bbmm
 }
+#######################################################################################################
 
 #Now kernelbb isn't optimized for doing multiple animals at once like kernelUD is (not to my knowledge!),
 #but we can use this iterative approach to make a list of results, and then combine at the end to give
@@ -204,33 +222,19 @@ for (i in 1:3) {
 
 #First, change the class of bbmm_puma to adehabitats matrix class...
 class(bbmm_puma) <- "estUDm"
-image(bbmm_puma) #Notice the ids are gone! We can get them back later
+image(bbmm_puma) #Check that ids are still shown for each animal
 
 #Let's get the contours for each animal and get the polygons for output
-bbmm_contours <- list()
+bbmm_contours <- getverticeshr(bbmm_puma, 95)
+plot(bbmm_contours, col = bbmm_contours$id)
+bbmm_contours$id
 
-for (i in 1:3) {
-  #we can get the contours just as we did with the KUD, but only one at a time...
-  bbmm_contours[[i]] <- getverticeshr(bbmm_puma[[i]], 95) 
-  #To get the IDs back, we have to paste them in to the appropriate slots...
-  slot(slot(bbmm_contours[[i]], "polygons")[[1]], "ID") <- as.character(bbmm_puma[[i]]$id[1])
-  }
-#This code will combine a list of spatialpolygons, in to a spatialpolygonsdataframe
-#Getting polygon IDs
-IDs <- sapply(bbmm_contours, function(x)
-  slot(slot(x, "polygons")[[1]], "ID"))
-
-#Checking
-length(unique(IDs)) == length(bbmm_contours)
-
-#Making SpatialPolygons from list of polygons
-bbmm_contours <- SpatialPolygons(lapply(bbmm_contours,
-                               function(x) slot(x, "polygons")[[1]]))
-
-plot(bbmm_contours, lwd=2)
 #Now we can output using the writeOGR() method
+writeOGR(kud_contour, "Puma_95_BBMM.shp", driver = "ESRI Shapefile", layer = "puma_bbmm")
 
-#So where does this 'dynamic' part of BBMM come in? Well with the calculations above, we assume a constant
+#dBBMM#
+#You may have also heard of a dynamic brownian bridge movement model, so where does this 'dynamic' 
+#part of BBMM come in? Well with the calculations above, we assume a constant
 #value for sig1 throughout the entire track. Of course, animals change their movement rates as they change
 #behaviour over time. The Dynamic BBMM, or dBBMM, uses likelihood statistics to find when the animal performs
 #a switch in behaviour. The process works a little like above, but by breaking the track down in to multiple
@@ -240,6 +244,11 @@ plot(bbmm_contours, lwd=2)
 
 #first we turn the puma dataframe in to a move object
 puma_move <- ld(puma_ltraj)
+
+#let's make puma_move smaller to speed up our calculations later...
+puma_move <- puma_move[year(puma_move$date) == 2015,] #look at only data for 2015
+
+#make in to move object...
 puma_move <- move(x=puma_move$x, y=puma_move$y, 
                animal=puma_move$id, time=puma_move$date, data=puma_move, 
                proj='+proj=utm +zone=19 +south +ellps=WGS84 +datum=WGS84 +units=m +no_defs')
@@ -248,14 +257,15 @@ puma_move <- move(x=puma_move$x, y=puma_move$y,
 plot(puma_move)
 
 #I find the dBBMM works best when you set up the raster on which the calculations are made first (YMMV!)
-r<-raster(puma_move, resolution=100) #an empty raster, with extent the size of puma_move, and 100 m resolution
-r<-extend(r,200) #extend out the raster so the dBBMM doesn't run over the edge!
+r<-raster(puma_move, resolution=150) #an empty raster, with extent the size of puma_move, and 150 m resolution
+r<-extend(r,100) #extend out the raster so the dBBMM doesn't run over the edge!
 
 #brownian.bridge.dyn() has some optional parameters, like the margin and window.size for the change point
 #analysis. I will leave these at default for now, but feel free to play around with these later.
 
 #We will also only do this for the first puma, because computation takes a while...
 plot(puma_move[[1]])
+
 dbbmm_puma <- brownian.bridge.dyn(puma_move[[1]], 
                                  raster = r,
                                  #dimSize=150, 
@@ -279,7 +289,7 @@ plot(poly_dbbmm, add=T)
 
 bbmm_overlap <- kerneloverlaphr(bbmm_puma, method = "HR")
 
-#There are multiple indices of overlap, the simplest being "HR", the proportion of the home range
+#There are multiple indices of overlap, the simplest being "HR", the proportion of the home range area
 #covered by another. Adehabitat has a few, type help('kerneloverlaphr') for a list, and check Fieberg
 #and Kochanny (2005, in folder) for a review.
 
