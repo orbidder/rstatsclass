@@ -5,16 +5,41 @@
 # We will go through how to sample available locations and model habitat selection today using 
 #   GPS data from vicuñas.
 
+install.packages("lme4")
+install.packages("sf")
+install.packages("tidyverse")
+install.packages("adehabitatHR")
+install.packages("mapview")
+install.packages("lubridate")
+install.packages("rgeos")
+install.packages("rgdal")
+install.packages("AICcmodavg")
+install.packages("AUC")
+install.packages("ROCR")
+
 # First, load the packages that you will be using
-library(raster)
-library(lme4)
-library(sf)
+
+# Syntax and formatting
 library(tidyverse)
-library(adehabitatHR)
-library(mapview)
 library(lubridate)
+# Home ranges
+library(adehabitatHR)
+# Spatial data
 library(rgeos)
 library(rgdal)
+library(raster)
+library(sf)
+# Model fitting and selection
+library(lme4)
+library(AICcmodavg)
+# ROC curves
+library(AUC)
+library(ROCR)
+# Visualizations
+library(mapview)
+library(RColorBrewer)
+library(sp)
+library(gridExtra)
 
 # Read in, clean, and project all your data - in a single pipe!
 # use read_csv to bring in data
@@ -57,21 +82,6 @@ ggplot() +
 # You can also visualize all the layers at once in base R
 plot(envtrasters)
 
-# Keep in mind temporal effects!
-# RSF may be a spatial analysis but if we think selection or availability may change over time, 
-#   we should consider that in our modeling approach
-# We can control for time either via appropriate covariate inclusion, or simply by limiting our scope.
-# Let's say we only want to know how vicuñas select habitat in the winter (June - September), for example
-
-# We can use a pipe to filter by winter months
-vicuna %>% 
-  # filter by months June - Sept
-  filter(lubridate::month(timestamp) %in% 6:9) %>% 
-  # get rid of extraneous time column
-  dplyr::select(-acquisition_time) %>%
-  # make a new column to show that these are real GPS data from collared vicuñas
-  mutate(Used = 1) -> vicuna
-
 # Choosing an available range
 # A conservative option is to use a 99% KUD (kernel utilization distribution)
 # We can also use a 95% KUD if we want to make sure to focus on areas used more frequently by individuals
@@ -85,6 +95,20 @@ mapview(envtrasters[[2]]) + mapview(vicuna_hr[1])
 # Or visualize individual home ranges on the NDVI layer
 mapview(envtrasters[[4]]) + mapview(vicuna_hr[18,1])
 
+# Keep in mind temporal effects!
+# RSF may be a spatial analysis but if we think selection or availability may change over time, 
+#   we should consider that in our modeling approach
+# We can control for time either via appropriate covariate inclusion, or simply by limiting our scope.
+# Let's say we only want to know how vicuñas select habitat outside of the summer (Dec-Mar), for example
+
+# We can use a pipe to filter by non-summer months
+vicuna %>% 
+  # filter by months April-November
+  filter(lubridate::month(timestamp) %in% 4:11) %>% 
+  # get rid of extraneous time column
+  dplyr::select(-acquisition_time) %>%
+  # make a new column to show that these are real GPS data from collared vicuñas
+  mutate(Used = 1) -> vicuna
 
 #--------
 # Now that we have created our home ranges, we can sample available points within each home range. 
@@ -174,8 +198,10 @@ summary(fixed.global <- glm(Used ~ NDVI.scaled + elev.scaled + tri.scaled, data=
 #---------
 # BREAK - random effects exercise! 
 
-# First: what are random effects??
-
+# First: what is a random effects model?
+#   A type of hierarchical linear model, whereby the data being analyzed are drawn from a hierarchy of populations
+#   Or, more simply, a model that contains random variables, which fits the coefficient values with random
+#     effects independently for each sub-populations
 
 # Let's explore how random effects alter model shape
 # To do this, we'll vary the slope and intercept of a logistic regression model and visualize the differences
@@ -214,21 +240,27 @@ points(fakeym1.5~fakex,ylim=c(0,1),col="red")
 # When might you want to use a random intercept? What about a random slope?
 
 # OK - back to the models!
+
 #---------
 
 # Random intercept model
-# Most common way to include a random effect
-# Addresses variation in sample sizes, moves logistic curve left and right
+#   Most common way to include a random effect
+#   Addresses variation in sample sizes, moves logistic curve left and right
+# Example hypothesis: general strength of selection varies by individual
 random.int.global <- glmer(Used ~ NDVI.scaled + elev.scaled + tri.scaled + (1|ID), 
                            data=vicuna_full, family=binomial(link="logit"))
+# Look at the AIC and strength of individual covariates
 summary(random.int.global)
+# Look at coefficient values for all covariates for each individual
 coef(random.int.global)
+# Isolate just the random effects. How is "ranef" related to the first column of "coef"?
 ranef(random.int.global)
 
-# Random slope
-# If you think individuals respond differently to environmental covariates
-# Risk in over-fitting
-# Example hypothesis: some individuals select for vegetation, whereas others do not, because of variation in internal state and risk-foraging tradeoffs
+# Random slope model
+#   Use a random slope if you think individuals respond differently to environmental covariates
+#   Risk in over-fitting, but the good news is that you can test for that in the cross-validation process
+# Example hypothesis: some individuals select for vegetation, whereas others do not, 
+#   because of variation in internal state and risk-foraging tradeoffs
 random.slp_ndvi.global <- glmer(Used ~ NDVI.scaled + elev.scaled + tri.scaled + (0+NDVI.scaled|ID), 
                                 data=vicuna_full, family=binomial(link="logit"))
 summary(random.slp_ndvi.global)
@@ -236,7 +268,8 @@ coef(random.slp_ndvi.global)
 ranef(random.slp_ndvi.global)
 
 # Both random slope and intercept
-# Example hypothesis: some individuals select for ruggedness, whereas others avoid it, because of variation in boldness
+# Example hypothesis: some individuals select for ruggedness, whereas others avoid it, 
+#   because of variation in boldness, and general strength of selection varies by individual
 random.int.slp_tri.global <- glmer(Used ~ NDVI.scaled + elev.scaled + tri.scaled + (1+tri.scaled|ID), 
                                   data=vicuna_full, family=binomial(link="logit"))
 summary(random.int.slp_tri.global)
@@ -247,30 +280,28 @@ ranef(random.int.slp_tri.global)
 #-----------
 #Model selection
 
-# Your turn! List your candidate models below based on your alternative hypotheses
+# Your turn! Come up with some alternative hypotheses
+# List your candidate models below based on your alternative hypotheses
 # Run your candidate models
 model1<-glmer(Used ~ NDVI.scaled + elev.scaled + tri.scaled + (1|ID), 
-              data=vicuna_cor, family=binomial(link="logit"))
+              data=vicuna_full, family=binomial(link="logit"))
 model2<-
 model3<-
 model4<-
 
-# Make a list of your models and compare the deltaAIC, relative log likelihook, and akaike weights
+# Make a list of your models and compare the deltaAIC, log likelihook, and akaike weights
 cand.models<-c(model1,model2,model3,model4)
-aic.func<-function(x){
-  AIC(logLik(x))
-}
-aics<-unlist(map(cand.models,aic.func),use.names=FALSE)
-
-library(qpcR)
-akaike.weights(aics)
+print(df.kill.models <- data.frame(aictab(cand.models)))
 
 #----------
-# Find optimal cutoff between used and available
-library(AUC)
-library(ROCR)
+# How do we decide which points are predicted to be used or available?
+# Do determine this, we calculate the optimal cutoff between used and available
+#   that maximizes sensitivity and specificity
+# Sensitivity: true positive rate
+# Specificity: true negative rate
 
 # Determine model cutoff between "used" and "available". This will help you interpret the visualizations.
+# Enter your top model name in the "fitted" command below
 fittedmod<-fitted(model1)
 target_pred<-as.matrix(fittedmod)
 target_class<-as.matrix(as.factor(vicuna_full$Used))
@@ -281,6 +312,21 @@ tpr = perf@y.values[[1]]
 sum = tpr + (1-fpr) 
 index = which.max(sum) 
 print(cutoff <- perf@alpha.values[[1]][[index]])
+
+# To get an initial feel for how good your model performed, you can look at the sensitivity and specificity
+#   in an ROC curve
+# A strong model has an area-under-the-curve (AUC) of over 0.8.
+plot(perf,col="black",lty=3, lwd=3)
+auc <- performance(pred,"auc")
+auc <- unlist(slot(auc, "y.values"))
+minauc<-min(round(auc, digits = 2))
+minauct <- paste(c("AUC  = "),minauc,sep="")
+legend(0.4,0.4,c(minauct,"\n"),border="white",cex=1.7,box.col = "white")
+
+# How does our model look?
+
+# This just shows us a first pass. We still need to do cross-validation to check our model fit
+
 
 #------------
 # Predict to map
@@ -294,10 +340,7 @@ random.int.raw <- glmer(Used ~ NDVI + elev + tri + (1|ID),
 # When this happens, you have to instead convert the rasters to the scale of the centered and normalized covariates in the model for mapping
 # To do this, we'll revisit our scale parameters for our covariates
 
-# Crop the environmental layers to our study area...
-envtrasters <- crop(envtrasters,extent(vicuna_hr))
-
-#...and make a new raster stack with just the covariates in the model
+# Make a new raster stack with just the covariates in the model
 env.rasters <- stack(envtrasters[[4]], envtrasters[[1]], envtrasters[[3]])
 
 # Scale the covariates to be centered and normalized, based on the scale parameters from our model covariates
@@ -315,9 +358,9 @@ predictionmap<-raster::predict(object=env.rasters,model=model1,
 # To visualize the differences among individuals, let's also map the individuals with the greatest deviations from the model intercept
 ranef(model1)
 predictionmap.2<-raster::predict(object=env.rasters,model=model1,
-                               const=(data.frame(ID="31")),type="response")
+                               const=(data.frame(ID="16")),type="response")
 predictionmap.3<-raster::predict(object=env.rasters,model=model1,
-                               const=(data.frame(ID="25")),type="response")
+                               const=(data.frame(ID="29")),type="response")
 
 # Three types of visualizations!
 
@@ -325,15 +368,12 @@ predictionmap.3<-raster::predict(object=env.rasters,model=model1,
 plot(predictionmap)
 
 # Visualization 2 in sp::spplot
-library(RColorBrewer)
-library(sp)
 breaks.plot<-c(seq(0,1,by=0.1))
 my.palette <- rev(brewer.pal(n = 10, name = "RdYlBu"))
 spplot(stack(predictionmap.2,predictionmap,predictionmap.3),
        col.regions=my.palette,at=breaks.plot)
 
 # Visualization 3 in ggplot2::ggplot
-library(gridExtra)
 prediction.raster <- as.data.frame(predictionmap, xy = TRUE)
 prediction.raster.2 <- as.data.frame(predictionmap.2, xy = TRUE)
 prediction.raster.3 <- as.data.frame(predictionmap.3, xy = TRUE)
