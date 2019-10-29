@@ -297,8 +297,8 @@ print(df.kill.models <- data.frame(aictab(cand.models)))
 # How do we decide which points are predicted to be used or available?
 # Do determine this, we calculate the optimal cutoff between used and available
 #   that maximizes sensitivity and specificity
-# Sensitivity: true positive rate
-# Specificity: true negative rate
+# Sensitivity: true positive rate 
+# Specificity: true negative rate 
 
 # Determine model cutoff between "used" and "available". This will help you interpret the visualizations.
 # Enter your top model name in the "fitted" command below
@@ -330,19 +330,24 @@ legend(0.4,0.4,c(minauct,"\n"),border="white",cex=1.7,box.col = "white")
 # Cross-validation is a very important part of the modeling process
 # While selecting based on AIC tells you which of your candidate models is the best
 #   it doesn't tell you if your "best" model is actually a GOOD model!
-# We will go over cross-validation in Seminar 8
+# Cross-validation allows you to see how well your model performs using your validated data
+# We will go over cross-validation in Seminar 8, but remember that you should always conduct a
+#   CV analysis on your final model to examine model fit
 
 
 #------------
-# Predict to map
+# Visualizing your model in space:
+#   predict your model output to a predictive surface
 
-# Ideally, we would be able to create a spatial predictive surface of habitat selection. 
-# To do this, we have to fit our model using the unscaled variables to match the original raster scales
+# Ideally, we would be able to create a spatial predictive surface of habitat selection using our 
+#   environmental layers
+# To do this, we could try to fit our model using the unscaled variables to match the original raster scales
 random.int.raw <- glmer(Used ~ NDVI + elev + tri + (1|ID), 
                           data=vicuna_full, family=binomial(link="logit"))
 
 # You'll note that the model doesn't converge because of the very different scales of the covariates
-# When this happens, you have to instead convert the rasters to the scale of the centered and normalized covariates in the model for mapping
+# When this happens, you have to instead convert the rasters to the scale 
+#   of the centered and normalized covariates in the model for mapping
 # To do this, we'll revisit our scale parameters for our covariates
 
 # Make a new raster stack with just the covariates in the model
@@ -360,7 +365,8 @@ names(env.rasters) <- c("NDVI.scaled", "elev.scaled", "tri.scaled")
 predictionmap<-raster::predict(object=env.rasters,model=model1,
                                re.form = NA,type="response")
 
-# To visualize the differences among individuals, let's also map the individuals with the greatest deviations from the model intercept
+# To visualize the differences among individuals, let's also map the individuals with the 
+#   greatest deviations from the model intercept
 ranef(model1)
 predictionmap.2<-raster::predict(object=env.rasters,model=model1,
                                const=(data.frame(ID="16")),type="response")
