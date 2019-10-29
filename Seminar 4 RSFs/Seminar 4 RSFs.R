@@ -5,23 +5,29 @@
 # We will go through how to sample available locations and model habitat selection today using 
 #   GPS data from vicuñas.
 
-install.packages("lme4")
-install.packages("sf")
 install.packages("tidyverse")
-install.packages("adehabitatHR")
-install.packages("mapview")
 install.packages("lubridate")
+install.packages("maptools")
+install.packages("adehabitatHR")
 install.packages("rgeos")
 install.packages("rgdal")
+install.packages("sf")
+install.packages("raster")
+install.packages("lme4")
 install.packages("AICcmodavg")
 install.packages("AUC")
 install.packages("ROCR")
+install.packages("mapview")
+install.packages("RColorBrewer")
+install.packages("sp")
+install.packages("gridExtra")
 
 # First, load the packages that you will be using
 
 # Syntax and formatting
 library(tidyverse)
 library(lubridate)
+library(maptools)
 # Home ranges
 library(adehabitatHR)
 # Spatial data
