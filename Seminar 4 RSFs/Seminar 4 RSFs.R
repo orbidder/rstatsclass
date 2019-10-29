@@ -44,18 +44,22 @@ library(gridExtra)
 # Read in, clean, and project all your data - in a single pipe!
 # use read_csv to bring in data
 vicuna <- read_csv("Seminar 4 RSFs/vicuna_data_2015.csv") %>% 
-  # then select only the columns we need for analysis - animal ID, datetime, and coordinates
-  dplyr::select(ID = animals_id, 5:7) %>% 
+  # We'll make a timestamp column with the correct time zone
+  # in this file, I've already corrected the time to be in Argentina hours, so we just need to assign the tz
+  # we will also create a day/night column to differentiate day and night
+  mutate(timestamp = force_tz(acquisition_time,tz="America/Argentina/San_Juan"),
+         sunrise = sunriset(SpatialPoints(cbind(longitude,latitude), proj4string=CRS("+init=epsg:4326")), timestamp, direction="sunrise", POSIXct.out=TRUE)[,2],
+         sunset = sunriset(SpatialPoints(cbind(longitude,latitude), proj4string=CRS("+init=epsg:4326")), timestamp, direction="sunset", POSIXct.out=TRUE)[,2],
+         daynight = ifelse(timestamp>sunrise&timestamp<sunset,1,0)) %>% 
+  # then select only the columns we need for analysis - animal ID, datetime, coordinates, and daynight
+  dplyr::select(ID = animals_id, 12, 6:7,15) %>% 
   # then create an sf object by calling the coordinates columns
   # it's very important that you know the coordinate reference system that your data are in!
   st_as_sf(., coords = 3:4, crs = "+init=epsg:4326") %>% 
   # next, let's transform our latitude and longitude columns to UTMs
-  st_transform("+init=epsg:32719") %>% 
-  # finally, we'll make a timestamp column with the correct time zone
-  # in this file, I've already corrected the time to be in Argentina hours, so we just need to assign the tz
-  mutate(timestamp = force_tz(acquisition_time,tz="America/Argentina/San_Juan"))
-
-# Always check your data!
+  st_transform("+init=epsg:32719")
+  
+# Always look at your data!
 vicuna
 
 # Now we can pull in our environmental data, which is in the form of a raster stack with 4 raster layers
@@ -67,10 +71,6 @@ names(envtrasters) <- c("dem","slope","tri","max_ndvi")
 
 # Let's look at the structure of the data
 envtrasters
-
-# Do our coordinate reference systems for the vicuña GPS data and the environmental layers match?
-crs(envtrasters)
-crs(vicuna)
 
 # Visualize environmental layers to make sure they make sense
 NDVI.raster <- as.data.frame(envtrasters[[4]], xy = TRUE)
@@ -99,16 +99,14 @@ mapview(envtrasters[[4]]) + mapview(vicuna_hr[18,1])
 # RSF may be a spatial analysis but if we think selection or availability may change over time, 
 #   we should consider that in our modeling approach
 # We can control for time either via appropriate covariate inclusion, or simply by limiting our scope.
-# Let's say we only want to know how vicuñas select habitat outside of the summer (Dec-Mar), for example
+# Let's say we only want to know how vicuñas select habitat in winter (June-Sept) during the day
 
-# We can use a pipe to filter by non-summer months
 vicuna %>% 
-  # filter by months April-November
-  filter(lubridate::month(timestamp) %in% 4:11) %>% 
-  # get rid of extraneous time column
-  dplyr::select(-acquisition_time) %>%
+  # filter by months June-Sept and daytime
+  filter(lubridate::month(timestamp) %in% 6:9, daynight == 1) %>% 
   # make a new column to show that these are real GPS data from collared vicuñas
   mutate(Used = 1) -> vicuna
+
 
 #--------
 # Now that we have created our home ranges, we can sample available points within each home range. 
@@ -128,7 +126,8 @@ for(i in 1:length(vicuna_ids)){
     st_sf(geometry = .) %>%
     # We'll save the list with columns that match our available data, including a "Used" column populated with zeroes
     mutate(ID = vicuna_ids[i], 
-           timestamp = NA, 
+           timestamp = NA,
+           daynight = NA,
            Used = 0) -> availables[[i]] 
 }
 
@@ -139,6 +138,13 @@ availables %>%
 
 # Do we have a 1:1 ratio of used:available?
 table(vicuna_all$ID,vicuna_all$Used)
+
+# Let's take a look at some of our used and available data
+plot(crop(envtrasters[[4]],extent(vicuna_hr[3,])))
+plot(vicuna_hr[3,],add=T)
+plot(st_geometry(filter(vicuna_all,ID == 16,Used == 0)),col="red",add=T)
+plot(st_geometry(filter(vicuna_all,ID == 16,Used == 1)),add=T)
+
 
 #--------
 
@@ -180,7 +186,8 @@ vicuna_full$ID <- as_factor(vicuna_full$ID)
 # General practice is to not include two covariates for which r > 0.7 (or, conservatively, 0.5)
 vicuna_cor <- vicuna_full
 st_geometry(vicuna_cor) <- NULL
-cor(vicuna_cor[,c(4:7)])
+cor(vicuna_cor[,c(5:8)])
+rm(vicuna_cor)
 
 # Are any of our covariates correlated?
 
@@ -247,7 +254,7 @@ points(fakeym1.5~fakex,ylim=c(0,1),col="red")
 #   Most common way to include a random effect
 #   Addresses variation in sample sizes, moves logistic curve left and right
 # Example hypothesis: general strength of selection varies by individual
-random.int.global <- glmer(Used ~ NDVI.scaled + elev.scaled + tri.scaled + (1|ID), 
+random.int.global <- glmer(Used ~ NDVI.scaled + elev.scaled + slope.scaled + (1|ID), 
                            data=vicuna_full, family=binomial(link="logit"))
 # Look at the AIC and strength of individual covariates
 summary(random.int.global)
@@ -261,7 +268,7 @@ ranef(random.int.global)
 #   Risk in over-fitting, but the good news is that you can test for that in the cross-validation process
 # Example hypothesis: some individuals select for vegetation, whereas others do not, 
 #   because of variation in internal state and risk-foraging tradeoffs
-random.slp_ndvi.global <- glmer(Used ~ NDVI.scaled + elev.scaled + tri.scaled + (0+NDVI.scaled|ID), 
+random.slp_ndvi.global <- glmer(Used ~ NDVI.scaled + elev.scaled + slope.scaled + (0+NDVI.scaled|ID), 
                                 data=vicuna_full, family=binomial(link="logit"))
 summary(random.slp_ndvi.global)
 coef(random.slp_ndvi.global)
@@ -270,7 +277,7 @@ ranef(random.slp_ndvi.global)
 # Both random slope and intercept
 # Example hypothesis: some individuals select for ruggedness, whereas others avoid it, 
 #   because of variation in boldness, and general strength of selection varies by individual
-random.int.slp_tri.global <- glmer(Used ~ NDVI.scaled + elev.scaled + tri.scaled + (1+tri.scaled|ID), 
+random.int.slp_tri.global <- glmer(Used ~ NDVI.scaled + elev.scaled + slope.scaled + (1+tri.scaled|ID), 
                                   data=vicuna_full, family=binomial(link="logit"))
 summary(random.int.slp_tri.global)
 coef(random.int.slp_tri.global)
@@ -283,7 +290,7 @@ ranef(random.int.slp_tri.global)
 # Your turn! Come up with some alternative hypotheses
 # List your candidate models below based on your alternative hypotheses
 # Run your candidate models
-model1<-glmer(Used ~ NDVI.scaled + elev.scaled + tri.scaled + (1|ID), 
+model1<-glmer(Used ~ NDVI.scaled + elev.scaled + slope.scaled + (1|ID), 
               data=vicuna_full, family=binomial(link="logit"))
 model2<-
 model3<-
@@ -316,6 +323,7 @@ print(cutoff <- perf@alpha.values[[1]][[index]])
 # To get an initial feel for how good your model performed, you can look at the sensitivity and specificity
 #   in an ROC curve
 # A strong model has an area-under-the-curve (AUC) of over 0.8.
+# An AUC of 0.5 means the model cannot discriminate between a true and false positive
 plot(perf,col="black",lty=3, lwd=3)
 auc <- performance(pred,"auc")
 auc <- unlist(slot(auc, "y.values"))
@@ -342,7 +350,7 @@ legend(0.4,0.4,c(minauct,"\n"),border="white",cex=1.7,box.col = "white")
 # Ideally, we would be able to create a spatial predictive surface of habitat selection using our 
 #   environmental layers
 # To do this, we could try to fit our model using the unscaled variables to match the original raster scales
-random.int.raw <- glmer(Used ~ NDVI + elev + tri + (1|ID), 
+random.int.raw <- glmer(Used ~ NDVI + elev + slope + (1|ID), 
                           data=vicuna_full, family=binomial(link="logit"))
 
 # You'll note that the model doesn't converge because of the very different scales of the covariates
@@ -351,15 +359,15 @@ random.int.raw <- glmer(Used ~ NDVI + elev + tri + (1|ID),
 # To do this, we'll revisit our scale parameters for our covariates
 
 # Make a new raster stack with just the covariates in the model
-env.rasters <- stack(envtrasters[[4]], envtrasters[[1]], envtrasters[[3]])
+env.rasters <- stack(envtrasters[[4]], envtrasters[[1]], envtrasters[[2]])
 
 # Scale the covariates to be centered and normalized, based on the scale parameters from our model covariates
 env.rasters[[1]]<-(env.rasters[[1]]-NDVIscalelist$center)/NDVIscalelist$scale
 env.rasters[[2]]<-(env.rasters[[2]]-elevscalelist$center)/elevscalelist$scale
-env.rasters[[3]]<-(env.rasters[[3]]-triscalelist$center)/triscalelist$scale
+env.rasters[[3]]<-(env.rasters[[3]]-slopescalelist$center)/slopescalelist$scale
 
 # Name the raster layers to match the model covariate names
-names(env.rasters) <- c("NDVI.scaled", "elev.scaled", "tri.scaled")
+names(env.rasters) <- c("NDVI.scaled", "elev.scaled", "slope.scaled")
 
 # Time to make a predicted raster layer based on your model!
 predictionmap<-raster::predict(object=env.rasters,model=model1,
@@ -371,7 +379,7 @@ ranef(model1)
 predictionmap.2<-raster::predict(object=env.rasters,model=model1,
                                const=(data.frame(ID="16")),type="response")
 predictionmap.3<-raster::predict(object=env.rasters,model=model1,
-                               const=(data.frame(ID="29")),type="response")
+                               const=(data.frame(ID="20")),type="response")
 
 # Three types of visualizations!
 
