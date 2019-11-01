@@ -51,9 +51,8 @@ library(gridExtra)
 # use read_csv to bring in data
 vicuna <- read_csv("Seminar 4 RSFs/vicuna_data_2015.csv") %>% 
   # We'll make a timestamp column with the correct time zone
-  # in this file, I've already corrected the time to be in Argentina hours, so we just need to assign the tz
   # we will also create a day/night column to differentiate day and night
-  mutate(timestamp = force_tz(acquisition_time,tz="America/Argentina/San_Juan"),
+  mutate(timestamp = with_tz(force_tz(acquisition_time,tz = "America/Los_Angeles"),tz="America/Argentina/San_Juan"),
          sunrise = sunriset(SpatialPoints(cbind(longitude,latitude), proj4string=CRS("+init=epsg:4326")), timestamp, direction="sunrise", POSIXct.out=TRUE)[,2],
          sunset = sunriset(SpatialPoints(cbind(longitude,latitude), proj4string=CRS("+init=epsg:4326")), timestamp, direction="sunset", POSIXct.out=TRUE)[,2],
          daynight = ifelse(timestamp>sunrise&timestamp<sunset,1,0)) %>% 
