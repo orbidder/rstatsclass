@@ -255,38 +255,107 @@ ssf_coefs %>%
 # Now that you can see the individual variation, what modifications might you make to our model?
 
 #-----------***--------------
-# Incorporating correlated data into a single model
 # Above, we made models for different individuals, but we might want a single population model
 # There are multiple ways to integrate correlated data into a single model
 # The first way is to build in a correlation structure in your model
 # We can do this by adding a cluster() parameter that seperates your data into clusters of correlated data
-# Important!!: For cluster() to do an adequate job fitting SEs, there need to be enough clusters
+# The robust standard errors are now fit using generalized estimating equations (GEE), which correct for autocorrelated data
+# Note that using GGEs are only appropriate if your data are temporally autocorrelated (see Prima et al. 2017)
+# Important!!: For GGEs to do an adequate job fitting robust SEs, there need to be enough clusters(>30) (see Prima et al. 2017)
 # Therefore, when we use cluster(), we might want to seperate individual animals into multiple clusters
 #   by breaking individual animal data into groups 
-# However, there can be correlation WITHIN individual animals, as well as between, 
-#   so we can do destructive sampling to make sure the groups are not correlated
-#   based on the ACF (autocorrelation function)
+# However, becasue there is  temporal autocorrelation WITHIN individual animals,
+#   we need to use destructive sampling to make sure the groups are not temporally autocorrelated, 
+#   so we remove data between groups for the time period in which temp AC exists based on the 
+#     ACF (autocorrelation function)
 # This approach DOES NOT impact the fit of the coefficents, but only helps to fit the robust standard
 #   errors using a GEE (generalized estimating equation)
 
+# Let's revisit our fixed effects models and add a cluster term
+
+# Although we should run an ACF to make eliminate autocorrelation between clusters, for now (just
+#   to see how the model works) we're just going to make clusters by animal ID and year
+ssfdat.all %>% 
+  mutate(year = year(t1_)) %>% 
+  unite("clust_id_yr",c(ID,year),remove = FALSE) -> ssfdat.all
+table(ssfdat.all$clust_id_yr)
+
+m0_c <- clogit(case_ ~ elev_s_end + tri_s_end + ndvi_s_end + cluster(clust_id_yr) +
+               strata(step_id_),method = "efron", robust = TRUE, data = ssfdat.all, model = TRUE)
+m1_c <- clogit(case_ ~ elev_s_end + tri_s_end + ndvi_s_end + ndvi_s_end:tod_start_ + cluster(clust_id_yr) +
+               strata(step_id_), method = "efron", robust = TRUE, data = ssfdat.all, model = TRUE)
+m2_c <- clogit(case_ ~ elev_s_end + tri_s_end + ndvi_s_end + 
+               tri_s_end:log_sl + cluster(clust_id_yr) +
+               strata(step_id_), method = "efron", robust = TRUE, data = ssfdat.all, model = TRUE)
+m3_c <- clogit(case_ ~ elev_s_end + tri_s_end + ndvi_s_end + 
+               ndvi_s_end:ndvi_s_start + cluster(clust_id_yr) +
+               strata(step_id_), method = "efron", robust = TRUE, data = ssfdat.all, model = TRUE)
 
 
+# Compare our cluster models to our original fixed effects conditional logistic regression models
+# What is different?
+summary(m0)
+summary(m0_c)
 
+summary(m1)
+summary(m1_c)
 
-# Random effects with the coxme package
+# The second way to deal with correlated data is using random effects (like we did with RSFs)
+# The assumptions here are different! We don't need to have temporal autocorrelation within individuals
+#   but we expect that habitat selection varies among individuals
+# Unlike the GEE models that just correct your SEs, mixed-effects models will also change your coefficient estimates
 
-cov.fit<-coxme(Surv(rep(1, length(ssfdat.all$ID)), case_) ~ elev_s_end + tri_s_end + ndvi_s_end +
+# Random effects SSF with the coxme package
+
+m0_me<-coxme(Surv(rep(1, length(ssfdat.all$ID)), case_) ~ elev_s_end + tri_s_end + ndvi_s_end +
                  strata(step_id_) + (1|ID),
                data = ssfdat.all, na.action = na.fail)
-summary(cov.fit)
-cov.fit2<-coxme(Surv(rep(1, length(ssfdat.all$ID)), case_) ~ elev_s_end + tri_s_end + ndvi_s_end + 
-                ndvi_s_end:ndvi_s_start +
+m1_me<-coxme(Surv(rep(1, length(ssfdat.all$ID)), case_) ~ elev_s_end + tri_s_end + ndvi_s_end + 
+                ndvi_s_end:tod_start_ +
                 strata(step_id_) + (1|ID),
                 data = ssfdat.all, na.action = na.fail)
-cov.fit3<-coxme(Surv(rep(1, length(ssfdat.all$ID)), case_) ~ elev_s_end + tri_s_end + ndvi_s_end +
-                tri_s_end:log_sl + 
+m2_me<-coxme(Surv(rep(1, length(ssfdat.all$ID)), case_) ~ elev_s_end + tri_s_end + ndvi_s_end + 
+                tri_s_end:log_sl +
                 strata(step_id_) + (1|ID),
                 data = ssfdat.all, na.action = na.fail)
+m3_me<-coxme(Surv(rep(1, length(ssfdat.all$ID)), case_) ~ elev_s_end + tri_s_end + ndvi_s_end + 
+               ndvi_s_end:ndvi_s_start +
+               strata(step_id_) + (1|ID),
+             data = ssfdat.all, na.action = na.fail)
 
-lrtest(cov.fit,cov.fit2,cov.fit3)
-model.sel(cov.fit,cov.fit2,cov.fit3,rank=AIC)
+summary(m0_me)
+
+lrtest(m0_me,m1_me,m2_me,m3_m3)
+model.sel(m0_me,m1_me,m2_me,m3_me,rank=AIC)
+
+# You might want to know if a mixed effects model is better than your fixed effects one
+# Use the below function to test to see which one is more supported
+TestRanef <- function(coxphModel,coxmeModel) {
+  if (!class(coxphModel) == "coxph" | !class(coxmeModel) == "coxme") {
+    stop("Wrong models")
+  }
+  ## Degrees of freedom
+  coxphDf <- sum(!is.na(coef(coxphModel)))
+  coxmeDf <- coxmeModel$df
+  names(coxmeDf) <- c("Integrated","Penalized")
+  ## DF differnces
+  dfDiff <- coxmeDf - coxphDf
+  ## Log likelihodds
+  coxphLogLik <- coxphModel$loglik[2]
+  coxmeLogLik <- coxmeModel$loglik + c(0, 0, coxmeModel$penalty)
+  coxmeLogLik <- coxmeLogLik[2:3]
+  ## -2 logLik difference
+  logLikNeg2Diff <- c(-2 * (coxphLogLik - coxmeLogLik["Integrated"]),
+                      -2 * (coxphLogLik - coxmeLogLik["Penalized"]))
+  ## p-values
+  pVals <- pchisq(q = logLikNeg2Diff, df = dfDiff, lower.tail = FALSE)
+  ## Combine
+  outDf <- data.frame(dfDiff, logLikNeg2Diff, pVals)
+  colnames(outDf) <- c("df diff", "-2logLik diff", "p-values")
+  outDf
+}
+
+# For the function to work, we have to make our model only class "coxph"
+class(m0)
+class(m0) <- "coxph"
+TestRanef(m0,m0_me)
