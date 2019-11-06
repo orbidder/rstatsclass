@@ -10,139 +10,167 @@ raster_files <- list.files("Seminar 5 SSFs/",pattern = ".tif")
 envtrasters <- raster::stack(paste0("Seminar 5 SSFs/", raster_files))
 names(envtrasters) <- c("dem", "slope",  "tri", "max_ndvi")
 
-read_csv("Seminar 5 SSFs/puma_data_2015.csv") %>% 
+puma_tr1 <- read_csv("Seminar 5 SSFs/puma_data_2015.csv") %>% 
   # First, select just the columns you need for the analysis
   dplyr::select(ID = animals_id, 5:7) %>% 
   # Then, make sure your date/times are in the correct time zone
-  mutate(timestamp = lubridate::with_tz(ymd_hms(acquisition_time,tz="America/Los_Angeles"),"America/Argentina/San_Juan")) %>% 
-  # Make a "track", which is used by package amt for movement analysis
-  mk_track(., longitude, latitude, timestamp, id=ID, crs = CRS("+init=epsg:4326")) %>% 
-  # Very fast way to determine day or night from movement data!
-  time_of_day() %>%
-  # Transform our latlongs into UTMs
-  transform_coords(., CRS("+init=epsg:32719")) -> puma_tr1
+  mutate(timestamp = lubridate::with_tz(ymd_hms(acquisition_time,tz="America/Los_Angeles"),"America/Argentina/San_Juan")) 
 
-# Save the class of data for later
-trk.class<-class(puma_tr1)
+puma_tr1 <- puma_tr1 %>%  nest(-ID) 
 
-# Next we eliminate steps that are longer than 3 hours apart and filter out bursts
+# Make a "track", which is used by package amt for movement analysis
+puma_tr1 <- puma_tr1 %>% 
+  mutate(trk = map(data, function(d){
+    mk_track(d, longitude, latitude, timestamp, crs = CRS("+init=epsg:4326")) %>% 
+      # Transform our latlongs into UTMs
+      transform_coords(CRS("+init=epsg:32719"))
+  }))
+
+# Are our fix rates normal? We should have steps 3 hours apart
+puma_tr1 %>%
+  mutate(sr = lapply(trk, summarize_sampling_rate)) %>% 
+  select(ID, sr) %>%  unnest
+
+# Nope! So let's eliminate steps that are longer than 3 hours apart and filter out bursts
 #   that only have one point
-puma_tr1 %>% group_by(id) %>% nest() %>% 
-  mutate(data = map(
-    data, ~ .x %>% 
+puma_tr1 %>% 
+  mutate(steps = map(trk, function(x){
+    x %>% 
       # Eliminate steps longer than 3 hours
       track_resample(rate = hours(3), tolerance = minutes(15)) %>%
       # Eliminate bursts with fewer than 2 points
-      filter_min_n_burst(min_n = 2))) %>% unnest() -> ssfdat
+      filter_min_n_burst(min_n = 2)})) -> ssfdat
 
 # Did we get rid of any locations?
-nrow(puma_tr1)
-nrow(ssfdat)
-
-# You'll notice that now our data are not a track anymore
-class(ssfdat)
-
-# So we need to change our tibble back to a track
-class(ssfdat)<-trk.class
-
-# With our track, we can calculate a number of movement parameters.
-# Here we are calculating the absolute direction of the step, the relative direction
-#   of the step, the step length, and the net squared displacement
-ssfdat %>% nest(-id) %>% 
-  mutate(dir_abs = map(data, direction_abs,full_circle=TRUE, zero="N"), 
-         dir_rel = map(data, direction_rel), 
-         sl = map(data, step_lengths),
-         nsd_ = map(data, nsd)) %>% unnest() -> ssfdat
-
-# You might have noticed that the bearing covariates were in radians
-#   For ease of use, we'll turn them into degrees
-ssfdat %>%
-  mutate(dir_abs = as_degree(dir_abs),
-         dir_rel = as_degree(dir_rel)) -> ssfdat
-
-# If we want to subset the data by year or month, or use time as an interacting
-#   term with a covariate in our model, we can add some columns for time into our track
-# When might you expect time to interact with a covariate?
-ssfdat%>% 
-  mutate(
-    week = week(t_),
-    month = month(t_, label=TRUE), 
-    year = year(t_),
-    hour = hour(t_)) -> ssfdat
-
-# Our data are not a track again!
-class(ssfdat)<-trk.class
+# Compare the dimentions of our individual tracks in comparison to the steps we're keeping
+ssfdat
 
 # Check out the sampling rate of each of our study animals
 # Do the medians look about right? What do you notice about the max values?
 # Take a close look at the means. Which animals do you think have 
 #   lower fix success?
-summarize_sampling_rate_many(ssfdat, id)
+ssfdat %>%
+  mutate(sr = lapply(steps, summarize_sampling_rate)) %>% 
+  select(ID, sr) %>%  unnest
+
+# Next we simulate steps from our distribution of step lengths and turn angles, 
+#   and extract the covariates for each step. 
+
+# A note on extracting covariates:
+# Generally we extract covariates at the END points of each step
+# However, in some cases, it may make sense to extract covariates ALONG a step
+# So, rather than ask: "did the animal end up in forest habitat?" you can ask:
+#   "what proportion of forest did they move through on their movement path?"
+#https://rdrr.io/cran/amt/man/extract_covariates.html
+# In other cases, it might make sense to extract covariates at the BEGINNING of the step
+# WHY??? 
+#...
+#...
+# As an interaction term - to see if the start location influences the end location or a 
+#   movement parameter
+# In the extract_covariates command, use where = "start", "end", or "both" depending on 
+#   your goals
+
+ssfdat %>%
+  mutate(moddata = map(steps, function (x){
+    x %>% 
+      steps_by_burst() %>% 
+      # Randomly sample 10 steps per real step
+      random_steps(n = 10) %>% 
+      # Determine day or night from movement track data
+      time_of_day(where = "start") %>% 
+      # Extract covariates from our raster stack
+      amt::extract_covariates(envtrasters,where="both")})) -> ssfdat
+
+# We need to scale our covariates, but right now our data are in different tibbles by individual
+# We want to make one dataframe, but we need a column for ID
+# To do that, we'll pull the IDs and the number of rows from each component of our data list
+ssfdat.all <- do.call(rbind,ssfdat$moddata)
+ID<-c()
+for (i in 1:length(ssfdat[[1]])) {
+   id <- rep(ssfdat[[i,1]],dim(ssfdat$moddata[[i]])[1])
+   ID<-c(ID,id)
+}
+ssfdat.all$ID <- ID
+
+# Scale the covariates, turn "case" into a binary 1/0 variable, 
+#   and add some movement parameters that we can use as covariates
+ssfdat.all %>% mutate(elev_s_start = scale(dem_start), 
+                  slope_s_start = scale(slope_start),
+                  tri_s_start = scale(tri_start),
+                  ndvi_s_start = scale(max_ndvi_start),
+                  elev_s_end = scale(dem_end), 
+                  slope_s_end = scale(slope_end),
+                  tri_s_end = scale(tri_end),
+                  ndvi_s_end = scale(max_ndvi_end),
+                  case_ = as.numeric(case_),
+                  cos_ta = cos(ta_), 
+                  log_sl = log(sl_)) -> ssfdat.all
+
+#----------***------------
+# Before we run our models, let's visualize our step lengths and turn angles
+
+# Our turn angles are in radians
+#   For ease of use, we'll turn them into degrees
+ssfdat.all %>%
+  mutate(ta_degree = as_degree(ta_)) -> ssfdat.all
 
 # First, we can look at the distribution of our turning angles as a rose plot
-ggplot(ssfdat, aes(x = dir_rel, y=..density..)) + geom_histogram(breaks = seq(-180,180, by=20))+
+ssfdat.all %>% 
+  filter(case_ == 1) %>% 
+  ggplot(., aes(x = ta_degree, y=..density..)) + geom_histogram(breaks = seq(-180,180, by=20))+
   coord_polar(start = 0) + theme_minimal() + 
   scale_fill_brewer() + ylab("Density") + ggtitle("Angles Direct") + 
   scale_x_continuous("", limits = c(-180, 180), breaks = seq(-180, 180, by=20), 
                      labels = seq(-180, 180, by=20))+
-  facet_wrap(~id)
-
-# Does the rose plot make your head spin? You can also look at turning angles as 
-#   a traditional histogram
-ggplot(ssfdat, aes(x = dir_rel)) +  geom_histogram(breaks = seq(-180,180, by=20))+
-  theme_minimal() + 
-  scale_fill_brewer() + ylab("Count") + ggtitle("Angles Relative") + 
-  scale_x_continuous("", limits = c(-180, 180), breaks = seq(-180, 180, by=20),
-                     labels = seq(-180, 180, by=20))+facet_wrap(~id, scales="free")
+  facet_wrap(~ID)
 
 # Also check out the distribution of step lengths
-ggplot(ssfdat, aes(x = sl)) +  geom_histogram() + theme_minimal() + 
+ssfdat.all %>% 
+  filter(case_ == 1) %>% 
+  ggplot(., aes(x = sl_)) +  geom_histogram() + theme_minimal() + 
   scale_fill_brewer() + ylab("Count") + ggtitle("Step Lengths") +
-  facet_wrap(~id, scales="free")
+  facet_wrap(~ID, scales="free")
 
 # We can also look at how movement parameters might differ between day and night
 # Here, we're looking at the log of step length
 # Why do we take the log of the step length? Modify the plot code to see!
-ggplot(ssfdat, aes(x = tod_, y = log(sl))) + 
-  geom_boxplot()+geom_smooth()+facet_wrap(~id)
-
-
-# Next we simulate steps from our distribution of step lengths and turn angles, 
-#   and extract the covariates for each step. 
-ssfdat %>% group_by(id) %>% nest() %>% 
-  mutate(data = map(
-    data, ~ .x %>% 
-      steps_by_burst() %>% 
-      # Randomly sample 10 steps per real step
-      random_steps(n = 10) %>% 
-      # Extract covariates from our raster stack
-      extract_covariates(envtrasters))) %>% unnest() -> ssfdat
-
-# A note on extracting covariates:
-# Above, we've extracted the covariates at the end points of each step
-# In some cases, it may make more sense to extract covariates ALONG a step
-# So, rather than ask: "did the animal end up in forest habitat?" you can ask:
-#   "what proportion of forest did they move through on their movement path?"
-#https://rdrr.io/cran/amt/man/extract_covariates.html
-
-# Scale the covariates, turn "case" into a binary 1/0 variable, 
-#   and add some movement parameters that we can use as covariates
-ssfdat %>% mutate(elev.s = scale(dem), 
-                  slope.s = scale(slope),
-                  tri.s = scale(tri),
-                  ndvi.s = scale(max_ndvi),
-                  case_ = as.numeric(case_),
-                  cos_ta = cos(ta_), 
-                  log_sl = log(sl_)) -> ssfdat
+ssfdat.all %>% 
+  filter(case_ == 1) %>% 
+  ggplot(., aes(x = tod_start_, y = log(sl_))) + 
+  geom_boxplot() + geom_smooth() + 
+  facet_wrap(~ID)
+ 
+#----------***------------
 
 # Write out your candidate models
-m0 <- clogit(case_ ~ elev.s + tri.s + ndvi.s + strata(step_id_),method = "efron", robust = TRUE, data = ssfdat, model = TRUE)
-m1 <- clogit(case_ ~ elev.s + + tri.s + ndvi.s + elev.s:cos_ta + elev.s:log_sl + log_sl * cos_ta + strata(step_id_), method = "efron", robust = TRUE, data = ssfdat, model = TRUE)
-m2 <- clogit(case_ ~ elev.s + + tri.s + ndvi.s + elev.s:cos_ta + elev.s:log_sl + log_sl + cos_ta + strata(step_id_), method = "efron", robust = TRUE, data = ssfdat, model = TRUE)
+# Here are just a few examples of ways you can structure your models
 
+# m0 just has habitat covariates at the end
+m0 <- clogit(case_ ~ elev_s_end + tri_s_end + ndvi_s_end + 
+               strata(step_id_),method = "efron", robust = TRUE, data = ssfdat.all, model = TRUE)
+
+# Do animals select for ndvi differently between day and night? 
+# m1 has habitat covariates at the end with an interaction term between NDVI and time of day
+m1 <- clogit(case_ ~ elev_s_end + tri_s_end + ndvi_s_end + ndvi_s_end:tod_start_ +
+               strata(step_id_), method = "efron", robust = TRUE, data = ssfdat.all, model = TRUE)
+
+# Do animals select rugged habitats depending on their speed of movement?
+# m2 has habitat covariates the end with an interaction term between TRI at the start and movement rate
+m2 <- clogit(case_ ~ elev_s_end + tri_s_end + ndvi_s_end + 
+               tri_s_end:log_sl +
+               strata(step_id_), method = "efron", robust = TRUE, data = ssfdat.all, model = TRUE)
+
+# Are animals likely to stay in the same NDVI as where they started?
+m3 <- clogit(case_ ~ elev_s_end + tri_s_end + ndvi_s_end + 
+               ndvi_s_end:ndvi_s_start +
+               strata(step_id_), method = "efron", robust = TRUE, data = ssfdat.all, model = TRUE)
+
+# Let's compare our models
 summary(m0)
 summary(m1)
 summary(m2)
+summary(m3)
 
 # Time for model comparison!
 # Instead of AIC, for conditional logistic regression models we use QIC
@@ -159,6 +187,7 @@ QIC.coxph <- function(mod, details = FALSE) {
 QIC.coxph(m0)
 QIC.coxph(m1)
 QIC.coxph(m2)
+QIC.coxph(m3)
 
 
 # From hab package (in development)
@@ -167,9 +196,10 @@ library(devtools)
 install_github("basille/hab")
 library(hab)
 
-kfold.CV <- kfold(m1, k = 5, nrepet = 10, jitter = FALSE,
+kfold.CV <- kfold(m0, k = 5, nrepet = 10, jitter = FALSE,
             reproducible = TRUE, details = FALSE)
 
+# The correct validation value is just that of the observed points
 kfold.CV %>%
   group_by(type) %>%
   summarize(mean_cor = mean(cor))
@@ -185,34 +215,35 @@ kfold.CV %>%
 #...............
 # So let's fit individual SSFs to each of our animals.
 # To do this, we can apply the conditional logistic regression model to our nested data
-fitted_ssf <- function(data){
-  fit_issf(case_ ~ elev.s + tri.s*log_sl + ndvi.s + strata(step_id_),method = "efron", robust = TRUE, data=data)
+fitted_ssf <- function(issf_model){
+  fit_issf(case_ ~ elev_s_end + tri_s_end + ndvi_s_end + strata(step_id_),method = "efron", robust = TRUE, data=issf_model)
 }
-ssfdat %>%  
-  filter(id!=3) %>%
-  group_by(id) %>% nest() %>% 
-  mutate(mod = map(data, fitted_ssf)) -> m1
 
+ssfdat.all %>% 
+#  filter(ID!="3") %>%
+  nest(-ID) %>% 
+  mutate(mod = map(data, fitted_ssf)) -> m.ind
+    
 # Package broom can help us tidy up out models into a tibble
-m1 %>%
+m.ind %>%
   mutate(tidy = map(mod, ~ broom::tidy(.x$model)),
-         n = map_int(data, nrow)) -> m1
+         n = map_int(data, nrow)) -> m.ind
 
 # To vizualise our model output, we can reveal the estimates of all iSSFs
-m1$tidy
+m.ind$tidy
 
 # Next, create data frame with the coefficients from all the SSFs
-ssf_coefs <- m1 %>%
+ssf_coefs <- m.ind %>%
   unnest(tidy) 
 
 # Just to make it a little more interesting, we can add the sex of the animals to our vizualization
 n.covs <- 3
-unique(m1$id)
-mutate(ssf_coefs, sex = c(rep(c("m","f","f","f","m","m","m","f"),each = n.covs))) -> ssf_coefs
+unique(m.ind$ID)
+mutate(ssf_coefs, sex = c(rep(c("f","f","m","m","m","f","m","m","f"),each = n.covs))) -> ssf_coefs
 
 # Plot the coefficients!
 ssf_coefs %>% 
-  ggplot(., aes(x=term, y=estimate, group = id, col = factor(id), pch = sex)) + 
+  ggplot(., aes(x=term, y=estimate, group = ID, col = factor(ID), pch = sex)) + 
   geom_pointrange(aes(ymin = conf.low, ymax = conf.high),
                   position = position_dodge(width = 0.7), size = 0.8) +
   geom_hline(yintercept = 0, lty = 2)+
@@ -222,5 +253,38 @@ ssf_coefs %>%
 
 # Now that you can see the individual variation, what modifications might you make to our model?
 
-# NOTE TO JUSTINE: Do we have time to go through coxme??
+#-----------***--------------
+# Incorporating correlated data into a single model
+# Above, we made models for different individuals, but we might want a single population model
+# There are multiple ways to integrate correlated data into a single model
+# The first way is to build in a correlation structure in your model
+# We can do this by adding a cluster() parameter that seperates your data into clusters of correlated data
+# Important!!: For cluster() to do an adequate job fitting SEs, there need to be enough clusters
+# Therefore, when we use cluster(), we might want to seperate individual animals into multiple clusters
+#   by breaking individual animal data into groups 
+# However, there can be correlation WITHIN individual animals, as well as between, 
+#   so we can do destructive sampling to make sure the groups are not correlated
+#   based on the ACF (autocorrelation function)
+# This approach DOES NOT impact the fit of the coefficents, but only helps to fit the robust standard
+#   errors using a GEE (generalized estimating equation)
 
+
+
+
+
+# Random effects with the coxme package
+
+cov.fit<-coxme(Surv(rep(1, length(new.c.dem$ID)), use) ~ slope.scl + elev.scl + strata(LocID) + (1|ID), 
+               data = new.c.dem, na.action = na.fail)
+summary(cov.fit)
+cov.fit2<-coxme(Surv(rep(1, length(new.c.dem$ID)), use) ~ slope.scl + elev.scl
+                + dist.urb.scl + dist.road.scl
+                + strata(LocID) + (1|ID), 
+                data = new.c.dem, na.action = na.fail)
+summary(cov.fit2)
+
+
+library(lmtest)
+library(muMIn)
+lrtest(cov.fit,cov.fit2,cov.fit3,cov.fit4,cov.fit5)
+model.sel(cov.fit,cov.fit2,cov.fit3,cov.fit4,cov.fit5,rank=AIC)
