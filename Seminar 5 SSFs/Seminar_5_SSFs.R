@@ -142,11 +142,34 @@ ssfdat.all %>%
   ggplot(., aes(x = tod_start_, y = log(sl_))) + 
   geom_boxplot() + geom_smooth() + 
   facet_wrap(~ID)
- 
+
+# Let's also look at what used and available steps look like
+# Here, the black point is our starting location and the colored points are our end locations
+ssfdat.all %>% 
+  filter(step_id_ == 4, ID == 6) %>% 
+  ggplot(.) + geom_point(aes(x = x2_,y = y2_,color = as.factor(case_))) + 
+  geom_point(aes(x = x1_, y = y1_))
+
+# Check out some other strata to see how they look by modifying the ID and step_id_
+
+#----------***------------
+# A note on behaviors
+# You might imagine that animals select habitat really differently if they are in 
+#   different behavioral states
+# (i.e. resting, feeding, meandering, directed travel)
+# Therefore, it is often wise to seperate your data into states before running SSF analyses
+# You can determine the state of your animal in a few different ways
+# With just GPS data, you can fit a hidden markov model (HMM) to determine state with the moveHMM package
+# If you have fine-scale accelerometer data, you can also use that to determine state
+# We won't seperate by states today, but there are some great resources that do this in 
+#   the github folder for today
+# Abrahms et al. 2017 and Suraci et al. 2019
+
 #----------***------------
 
-# Write out your candidate models
-# Here are just a few examples of ways you can structure your models
+# Now to the models!
+# As with RSFs, start by writing out your candidate models
+# Here are just a few examples of ways you can structure your models based on different hypotheses
 
 # m0 just has habitat covariates at the end
 m0 <- clogit(case_ ~ elev_s_end + tri_s_end + ndvi_s_end + 
