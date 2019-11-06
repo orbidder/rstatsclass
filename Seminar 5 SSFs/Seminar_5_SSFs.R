@@ -5,6 +5,8 @@ library(sf)
 library(dplyr)
 library(tidyverse)
 library(survival)
+library(lmtest)
+library(MuMIn)
 
 raster_files <- list.files("Seminar 5 SSFs/",pattern = ".tif") 
 envtrasters <- raster::stack(paste0("Seminar 5 SSFs/", raster_files))
@@ -220,7 +222,6 @@ fitted_ssf <- function(issf_model){
 }
 
 ssfdat.all %>% 
-#  filter(ID!="3") %>%
   nest(-ID) %>% 
   mutate(mod = map(data, fitted_ssf)) -> m.ind
     
@@ -274,17 +275,18 @@ ssf_coefs %>%
 
 # Random effects with the coxme package
 
-cov.fit<-coxme(Surv(rep(1, length(new.c.dem$ID)), use) ~ slope.scl + elev.scl + strata(LocID) + (1|ID), 
-               data = new.c.dem, na.action = na.fail)
+cov.fit<-coxme(Surv(rep(1, length(ssfdat.all$ID)), case_) ~ elev_s_end + tri_s_end + ndvi_s_end +
+                 strata(step_id_) + (1|ID),
+               data = ssfdat.all, na.action = na.fail)
 summary(cov.fit)
-cov.fit2<-coxme(Surv(rep(1, length(new.c.dem$ID)), use) ~ slope.scl + elev.scl
-                + dist.urb.scl + dist.road.scl
-                + strata(LocID) + (1|ID), 
-                data = new.c.dem, na.action = na.fail)
-summary(cov.fit2)
+cov.fit2<-coxme(Surv(rep(1, length(ssfdat.all$ID)), case_) ~ elev_s_end + tri_s_end + ndvi_s_end + 
+                ndvi_s_end:ndvi_s_start +
+                strata(step_id_) + (1|ID),
+                data = ssfdat.all, na.action = na.fail)
+cov.fit3<-coxme(Surv(rep(1, length(ssfdat.all$ID)), case_) ~ elev_s_end + tri_s_end + ndvi_s_end +
+                tri_s_end:log_sl + 
+                strata(step_id_) + (1|ID),
+                data = ssfdat.all, na.action = na.fail)
 
-
-library(lmtest)
-library(muMIn)
-lrtest(cov.fit,cov.fit2,cov.fit3,cov.fit4,cov.fit5)
-model.sel(cov.fit,cov.fit2,cov.fit3,cov.fit4,cov.fit5,rank=AIC)
+lrtest(cov.fit,cov.fit2,cov.fit3)
+model.sel(cov.fit,cov.fit2,cov.fit3,rank=AIC)
