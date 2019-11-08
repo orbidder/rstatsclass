@@ -137,7 +137,15 @@ for (i in 1:length(ssfdat[[1]])) {
 }
 ssfdat.all$ID <- ID
 
-ssfdat.all
+ssfdat.all 
+
+# One issue we have with our new dataset is that there are the same step IDs for multiple individual pumas
+# To deal with that, we'll make a new step column
+ssfdat.all$stepID <- ssfdat.all$ID*100000 + ssfdat.all$step_id_
+
+# We'll also remove any lines with NAs
+# Normally we shouldn't have NAs, but I cropped our raster layer too small, so this is just where we are!
+ssfdat.all <- drop_na(ssfdat.all)
 
 # Scale the covariates, turn "case" into a binary 1/0 variable, 
 #   and add some movement parameters that we can use as covariates
@@ -218,9 +226,9 @@ ssfdat.all %>%
 # m0 just has habitat covariates at the end
 # note: amt has a wrapper for clogit called fit_issf. These commands should produce identical outcomes
 m0 <- clogit(case_ ~ elev_s_end + tri_s_end + ndvi_s_end + 
-               strata(step_id_),method = "efron", robust = TRUE, data = ssfdat.all, model = TRUE)
+               strata(stepID),method = "efron", robust = TRUE, data = ssfdat.all, model = TRUE)
 m0.b <- fit_issf(case_ ~ elev_s_end + tri_s_end + ndvi_s_end + 
-               strata(step_id_),method = "efron", robust = TRUE, data = ssfdat.all, model = TRUE)
+               strata(stepID),method = "efron", robust = TRUE, data = ssfdat.all, model = TRUE)
 
 summary(m0)
 summary(m0.b)
@@ -229,18 +237,18 @@ summary(m0.b)
 # m1 has habitat covariates at the end with an interaction term between NDVI and time of day
 m1 <- clogit(case_ ~ elev_s_end + tri_s_end + ndvi_s_end + 
                ndvi_s_end:tod_start_ +
-               strata(step_id_), method = "efron", robust = TRUE, data = ssfdat.all, model = TRUE)
+               strata(stepID), method = "efron", robust = TRUE, data = ssfdat.all, model = TRUE)
 
 # Do animals select rugged habitats depending on their speed of movement?
 # m2 has habitat covariates the end with an interaction term between TRI at the start and movement rate
 m2 <- clogit(case_ ~ elev_s_end + tri_s_end + ndvi_s_end + 
                tri_s_end:log_sl +
-               strata(step_id_), method = "efron", robust = TRUE, data = ssfdat.all, model = TRUE)
+               strata(stepID), method = "efron", robust = TRUE, data = ssfdat.all, model = TRUE)
 
 # Are animals more likely to stay in the same NDVI as where they started?
 m3 <- clogit(case_ ~ elev_s_end + tri_s_end + ndvi_s_end + 
                ndvi_s_end:ndvi_s_start +
-               strata(step_id_), method = "efron", robust = TRUE, data = ssfdat.all, model = TRUE)
+               strata(stepID), method = "efron", robust = TRUE, data = ssfdat.all, model = TRUE)
 
 # Let's compare our models
 summary(m0)
@@ -295,7 +303,7 @@ kfold.CV %>%
 # So let's fit individual SSFs to each of our animals.
 # First, let's make a function for individual SSF models
 fitted_ssf <- function(issf_model){
-  fit_issf(case_ ~ elev_s_end + tri_s_end + ndvi_s_end + strata(step_id_),method = "efron", robust = TRUE, data=issf_model)
+  fit_issf(case_ ~ elev_s_end + tri_s_end + ndvi_s_end + strata(stepID),method = "efron", robust = TRUE, data=issf_model)
 }
 
 # Next, we can apply the conditional logistic regression model to our nested data
@@ -365,15 +373,15 @@ ssfdat.all %>%
 table(ssfdat.all$clust_id_yr)
 
 m0_c <- clogit(case_ ~ elev_s_end + tri_s_end + ndvi_s_end + cluster(clust_id_yr) +
-               strata(step_id_),method = "efron", robust = TRUE, data = ssfdat.all, model = TRUE)
+               strata(stepID),method = "efron", robust = TRUE, data = ssfdat.all, model = TRUE)
 m1_c <- clogit(case_ ~ elev_s_end + tri_s_end + ndvi_s_end + ndvi_s_end:tod_start_ + cluster(clust_id_yr) +
-               strata(step_id_), method = "efron", robust = TRUE, data = ssfdat.all, model = TRUE)
+               strata(stepID), method = "efron", robust = TRUE, data = ssfdat.all, model = TRUE)
 m2_c <- clogit(case_ ~ elev_s_end + tri_s_end + ndvi_s_end + 
                tri_s_end:log_sl + cluster(clust_id_yr) +
-               strata(step_id_), method = "efron", robust = TRUE, data = ssfdat.all, model = TRUE)
+               strata(stepID), method = "efron", robust = TRUE, data = ssfdat.all, model = TRUE)
 m3_c <- clogit(case_ ~ elev_s_end + tri_s_end + ndvi_s_end + 
                ndvi_s_end:ndvi_s_start + cluster(clust_id_yr) +
-               strata(step_id_), method = "efron", robust = TRUE, data = ssfdat.all, model = TRUE)
+               strata(stepID), method = "efron", robust = TRUE, data = ssfdat.all, model = TRUE)
 
 
 # Compare our cluster models to our original fixed effects conditional logistic regression models
@@ -394,19 +402,19 @@ summary(m1_c)
 # Random effects SSF with the coxme package
 
 m0_me<-coxme(Surv(rep(1, length(ssfdat.all$ID)), case_) ~ elev_s_end + tri_s_end + ndvi_s_end +
-                 strata(step_id_) + (1|ID),
+                 strata(stepID) + (1|ID),
                data = ssfdat.all, na.action = na.fail)
 m1_me<-coxme(Surv(rep(1, length(ssfdat.all$ID)), case_) ~ elev_s_end + tri_s_end + ndvi_s_end + 
                 ndvi_s_end:tod_start_ +
-                strata(step_id_) + (1|ID),
+                strata(stepID) + (1|ID),
                 data = ssfdat.all, na.action = na.fail)
 m2_me<-coxme(Surv(rep(1, length(ssfdat.all$ID)), case_) ~ elev_s_end + tri_s_end + ndvi_s_end + 
                 tri_s_end:log_sl +
-                strata(step_id_) + (1|ID),
+                strata(stepID) + (1|ID),
                 data = ssfdat.all, na.action = na.fail)
 m3_me<-coxme(Surv(rep(1, length(ssfdat.all$ID)), case_) ~ elev_s_end + tri_s_end + ndvi_s_end + 
                ndvi_s_end:ndvi_s_start +
-               strata(step_id_) + (1|ID),
+               strata(stepID) + (1|ID),
              data = ssfdat.all, na.action = na.fail)
 
 summary(m0_me)
