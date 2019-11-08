@@ -267,40 +267,6 @@ summary(m1)
 summary(m2)
 summary(m3)
 
-# Time for model comparison!
-# Instead of AIC, for conditional logistic regression models we use QIC
-# QIC is better suited to accommodate comparisons within strata while correcting
-#   for autocorrelation among strata
-# Here's our function for calculating QIC from an SSF model
-QIC.coxph <- function(mod, details = FALSE) {
-  trace <- sum(diag(solve(mod$naive.var) %*% mod$var))
-  quasi <- mod$loglik[2]
-  return(-2*quasi + 2*trace)
-}
-
-# Which model is best supported?
-QIC.coxph(m0)
-QIC.coxph(m1)
-QIC.coxph(m2)
-QIC.coxph(m3)
-
-# After fitting a non-clustered model, we can use the residuals in the model to look at autocorrelation
-# We calculate the lag at which autocorrelation is no longer observed using acf.test
-acf.test <- function (residuals, id, type = c("correlation", "covariance","partial"), ci = 0.95)
-{
-  type <- match.arg(type)
-  acfk <- lapply(levels(factor(id)), function(x) acf(residuals[id == x], type = type, plot = FALSE))
-  threshold <- unlist(lapply(acfk, function(x) qnorm((1 + ci)/2)/sqrt(x$n.used)))
-  lag <- unlist(lapply(1:length(acfk), function(i) which(acfk[[i]]$acf < threshold[i])[1]))
-  return(list(acfk = acfk, threshold = threshold, lag = lag))
-}
-
-acf.test(m0$residuals,ssfdat.all$ID, type = "correlation")
-
-# Here, we might use makeCluster to split up your data into clusters
-# For makeCluster, you'll have to make another column that is a sequence of numbers within each individual
-# But makeCluster takes forever, so we'll just make some arbitraty clusters today
-
 
 #-----------***--------------
 # There are multiple ways to integrate correlated data into a single model
@@ -323,15 +289,33 @@ acf.test(m0$residuals,ssfdat.all$ID, type = "correlation")
 #   calculate the robust standard errors 
 #     (by accounting for heteroskedasticity, i.e. differential variance among sub-populations)
 
-# Let's revisit our fixed effects models and add a cluster term
 
-# Although we should use our ACF analysis to eliminate autocorrelation between clusters, 
-#   for now (just to see how the model works) we're just going to make clusters by animal ID and year
-#     (largely because makeCluster is so slow)
+# After fitting a non-clustered model, we can use the residuals in the model to look at autocorrelation
+# We calculate the lag at which autocorrelation is no longer observed using acf.test
+acf.test <- function (residuals, id, type = c("correlation", "covariance","partial"), ci = 0.95)
+{
+  type <- match.arg(type)
+  acfk <- lapply(levels(factor(id)), function(x) acf(residuals[id == x], type = type, plot = FALSE))
+  threshold <- unlist(lapply(acfk, function(x) qnorm((1 + ci)/2)/sqrt(x$n.used)))
+  lag <- unlist(lapply(1:length(acfk), function(i) which(acfk[[i]]$acf < threshold[i])[1]))
+  return(list(acfk = acfk, threshold = threshold, lag = lag))
+}
+
+acf.test(m0$residuals,ssfdat.all$ID, type = "correlation")
+
+# Now we should use our ACF analysis to eliminate autocorrelation between clusters
+# Because our lag is 2, we could just split each puma into two-three equal sized samples with 2 points
+#   removed in between
+# Or you can split individuals by natural breaks in the data (still with the lag size removed)
+# Buuuut for now (just to see how the model works) we're just going to make clusters by animal ID 
+#   and year without eliminating the autocorrelated points (Don't do this in your analysis!)
+
 ssfdat.all %>% 
   mutate(year = year(t1_)) %>% 
   unite("clust_id_yr",c(ID,year),remove = FALSE) -> ssfdat.all
 table(ssfdat.all$clust_id_yr)
+
+# Let's revisit our fixed effects models and add a cluster term
 
 m0_c <- clogit(case_ ~ elev_s_end + tri_s_end + ndvi_s_end + cluster(clust_id_yr) +
                strata(stepID),method = "efron", robust = TRUE, data = ssfdat.all, model = TRUE)
@@ -347,6 +331,17 @@ m3_c <- clogit(case_ ~ elev_s_end + tri_s_end + ndvi_s_end +
 # What is different about our model output in the model with clusters?
 summary(m0)
 summary(m0_c)
+
+# Time for model comparison!
+# Instead of AIC, for conditional logistic regression models we use QIC
+# QIC is better suited to accommodate comparisons within strata while correcting
+#   for autocorrelation among strata
+# Here's our function for calculating QIC from an SSF model
+QIC.coxph <- function(mod, details = FALSE) {
+  trace <- sum(diag(solve(mod$naive.var) %*% mod$var))
+  quasi <- mod$loglik[2]
+  return(-2*quasi + 2*trace)
+}
 
 # Which model is best supported?
 QIC.coxph(m0_c)
