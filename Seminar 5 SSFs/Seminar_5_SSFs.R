@@ -41,7 +41,7 @@ library(MuMIn)
 # So we list the files and then bring them in as a stack using paste0
 raster_files <- list.files("Seminar 5 SSFs/",pattern = ".tif") 
 envtrasters <- raster::stack(paste0("Seminar 5 SSFs/", raster_files))
-names(envtrasters) <- c("dem", "slope",  "tri", "max_ndvi")
+names(envtrasters) <- c("dem", "max_ndvi", "slope",  "tri")
 
 # Next, we'll bring in our GPS data, but we won't yet deal with making it spatial
 puma_tr1 <- read_csv("Seminar 5 SSFs/puma_data_2015.csv") %>% 
@@ -272,9 +272,9 @@ library(devtools)
 install_github("basille/hab")
 library(hab)
 
-# Normally we would want at least 100 repetitions, but in the interest of time we'll use a 
+# Normally we would want ~ 100 repetitions, but in the interest of time we'll use a 
 #   smaller number in class today
-kfold.CV <- kfold(m2, k = 5, nrepet = 10, jitter = FALSE,
+kfold.CV <- kfold(m0, k = 5, nrepet = 10, jitter = FALSE,
             reproducible = TRUE, details = TRUE)
 
 # The correct validation value is just that of the observed points
