@@ -19,6 +19,7 @@ install.packages("tidyverse")
 install.packages("survival")
 install.packages("lmtest")
 install.packages("MuMIn")
+install.packages("devtools")
 
 # Load your packages
 
@@ -35,6 +36,12 @@ library(survival)
 # Model selection using mixed-effects cox models
 library(lmtest)
 library(MuMIn)
+
+# From hab package (in development)
+# https://github.com/basille/hab/blob/master/R/kfold.r
+library(devtools)
+install_github("basille/hab")
+library(hab)
 
 # Load in your environmental covariates
 # Unlike last week, when all our rasters were already in a stack, today we have 4 individual files
@@ -222,6 +229,10 @@ ssfdat.all %>%
 # Now to the models!
 # As with RSFs, start by writing out your candidate models
 # Here are just a few examples of ways you can structure your models based on different hypotheses
+# Generally you will use a cluster() term any time you fit SSFs, particulalry if your data are 
+#   autocorrelated.
+# Therefore, these models below aren't really complete
+# Here we'll just check them out to get a rough idea of hypothesis testing and model fit
 
 # m0 just has habitat covariates at the end
 # note: amt has a wrapper for clogit called fit_issf. These commands should produce identical outcomes
@@ -250,7 +261,7 @@ m3 <- clogit(case_ ~ elev_s_end + tri_s_end + ndvi_s_end +
                ndvi_s_end:ndvi_s_start +
                strata(stepID), method = "efron", robust = TRUE, data = ssfdat.all, model = TRUE)
 
-# Let's compare our models
+# Let's look at our models
 summary(m0)
 summary(m1)
 summary(m2)
@@ -273,76 +284,25 @@ QIC.coxph(m1)
 QIC.coxph(m2)
 QIC.coxph(m3)
 
-
-# From hab package (in development)
-# https://github.com/basille/hab/blob/master/R/kfold.r
-library(devtools)
-install_github("basille/hab")
-library(hab)
-
-# Normally we would want ~ 100 repetitions, but in the interest of time we'll use a 
-#   smaller number in class today
-kfold.CV <- kfold(m0, k = 5, nrepet = 10, jitter = FALSE,
-            reproducible = TRUE, details = TRUE)
-
-# The correct validation value is just that of the observed points
-kfold.CV %>%
-  group_by(type) %>%
-  summarize(mean_cor = mean(cor))
-
-
-#__________********_________
-
-# The global model is a good start, expecially if we think animals respond 
-#   similarly to their environment while moving
-# But, we might want to look at individual variation among animals in their movement behavior
-# Why might we want to do this? Discussion break!
-#...............
-#...............
-
-# So let's fit individual SSFs to each of our animals.
-# First, let's make a function for individual SSF models
-fitted_ssf <- function(issf_model){
-  fit_issf(case_ ~ elev_s_end + tri_s_end + ndvi_s_end + strata(stepID),method = "efron", robust = TRUE, data=issf_model)
+# After fitting a non-clustered model, we can use the residuals in the model to look at autocorrelation
+# We calculate the lag at which autocorrelation is no longer observed using acf.test
+acf.test <- function (residuals, id, type = c("correlation", "covariance","partial"), ci = 0.95)
+{
+  type <- match.arg(type)
+  acfk <- lapply(levels(factor(id)), function(x) acf(residuals[id == x], type = type, plot = FALSE))
+  threshold <- unlist(lapply(acfk, function(x) qnorm((1 + ci)/2)/sqrt(x$n.used)))
+  lag <- unlist(lapply(1:length(acfk), function(i) which(acfk[[i]]$acf < threshold[i])[1]))
+  return(list(acfk = acfk, threshold = threshold, lag = lag))
 }
 
-# Next, we can apply the conditional logistic regression model to our nested data
-ssfdat.all %>% 
-  nest(-ID) %>% 
-  mutate(mod = map(data, fitted_ssf)) -> m.ind
-    
-# Package broom can help us tidy up out models into a tibble
-m.ind %>%
-  mutate(tidy = map(mod, ~ broom::tidy(.x$model)),
-         n = map_int(data, nrow)) -> m.ind
+acf.test(m0$residuals,ssfdat.all$ID, type = "correlation")
 
-# To vizualise our model output, we can reveal the estimates of all iSSFs
-m.ind$tidy
+# Here, we might use makeCluster to split up your data into clusters
+# For makeCluster, you'll have to make another column that is a sequence of numbers within each individual
+# But makeCluster takes forever, so we'll just make some arbitraty clusters today
 
-# To vizualize or report the results, we may want to create a data frame with the 
-#   coefficients from all the SSFs
-ssf_coefs <- m.ind %>%
-  unnest(tidy) 
-
-# Just to make it a little more interesting, we can add the sex of the animals for our vizualization
-n.covs <- 3
-unique(m.ind$ID)
-mutate(ssf_coefs, sex = c(rep(c("f","f","m","m","m","f","m","m","f"),each = n.covs))) -> ssf_coefs
-
-# Plot the coefficients!
-ssf_coefs %>% 
-  ggplot(., aes(x=term, y=estimate, group = ID, col = factor(ID), pch = sex)) + 
-  geom_pointrange(aes(ymin = conf.low, ymax = conf.high),
-                  position = position_dodge(width = 0.7), size = 0.8) +
-  geom_hline(yintercept = 0, lty = 2)+
-  facet_wrap(~term, scales="free") + 
-  labs(x = "Covariate", y = "Relative Selection Strength") +
-  theme_light()
-
-# Now that you can see the individual variation, what modifications might you make to our model?
 
 #-----------***--------------
-# Above, we made models for different individuals, but we might want a single population model
 # There are multiple ways to integrate correlated data into a single model
 # The first way is to build in a correlation structure in your model
 # We can do this by adding a cluster() parameter that seperates your data into clusters 
@@ -365,8 +325,9 @@ ssf_coefs %>%
 
 # Let's revisit our fixed effects models and add a cluster term
 
-# Although we should run an ACF analysis to make eliminate autocorrelation between clusters, 
+# Although we should use our ACF analysis to eliminate autocorrelation between clusters, 
 #   for now (just to see how the model works) we're just going to make clusters by animal ID and year
+#     (largely because makeCluster is so slow)
 ssfdat.all %>% 
   mutate(year = year(t1_)) %>% 
   unite("clust_id_yr",c(ID,year),remove = FALSE) -> ssfdat.all
@@ -383,16 +344,28 @@ m3_c <- clogit(case_ ~ elev_s_end + tri_s_end + ndvi_s_end +
                ndvi_s_end:ndvi_s_start + cluster(clust_id_yr) +
                strata(stepID), method = "efron", robust = TRUE, data = ssfdat.all, model = TRUE)
 
-
-# Compare our cluster models to our original fixed effects conditional logistic regression models
-# What is different?
+# What is different about our model output in the model with clusters?
 summary(m0)
 summary(m0_c)
 
-summary(m1)
-summary(m1_c)
+# Which model is best supported?
+QIC.coxph(m0_c)
+QIC.coxph(m1_c)
+QIC.coxph(m2_c)
+QIC.coxph(m3_c)
 
+# Now we can assess model fit
+# Normally we would want ~ 100 repetitions, but in the interest of time we'll use a 
+#   smaller number in class today
+kfold.CV <- kfold(m0_c, k = 5, nrepet = 2, jitter = FALSE,
+                  reproducible = TRUE, details = TRUE)
 
+# The correct validation value is just that of the observed points
+kfold.CV %>%
+  group_by(type) %>%
+  summarize(mean_cor = mean(cor))
+
+#_________________***__________________
 # The second way to deal with correlated data is using random effects (like we did with RSFs)
 # The assumptions here are different! We don't need to have temporal autocorrelation within 
 #   individuals but we expect that habitat selection varies among individuals
@@ -422,34 +395,55 @@ summary(m0_me)
 lrtest(m0_me,m1_me,m2_me,m3_me)
 model.sel(m0_me,m1_me,m2_me,m3_me,rank=AIC)
 
-# You might want to know if a mixed effects model is better than your fixed effects one
-# Use the below function to test to see which one is more supported
-TestRanef <- function(coxphModel,coxmeModel) {
-  if (!class(coxphModel) == "coxph" | !class(coxmeModel) == "coxme") {
-    stop("Wrong models")
-  }
-  ## Degrees of freedom
-  coxphDf <- sum(!is.na(coef(coxphModel)))
-  coxmeDf <- coxmeModel$df
-  names(coxmeDf) <- c("Integrated","Penalized")
-  ## DF differnces
-  dfDiff <- coxmeDf - coxphDf
-  ## Log likelihodds
-  coxphLogLik <- coxphModel$loglik[2]
-  coxmeLogLik <- coxmeModel$loglik + c(0, 0, coxmeModel$penalty)
-  coxmeLogLik <- coxmeLogLik[2:3]
-  ## -2 logLik difference
-  logLikNeg2Diff <- c(-2 * (coxphLogLik - coxmeLogLik["Integrated"]),
-                      -2 * (coxphLogLik - coxmeLogLik["Penalized"]))
-  ## p-values
-  pVals <- pchisq(q = logLikNeg2Diff, df = dfDiff, lower.tail = FALSE)
-  ## Combine
-  outDf <- data.frame(dfDiff, logLikNeg2Diff, pVals)
-  colnames(outDf) <- c("df diff", "-2logLik diff", "p-values")
-  outDf
+
+# Unfortunately there is no kfold command for coxme
+
+
+#__________********_________
+
+# The global model is a good start, expecially if we think animals respond 
+#   similarly to their environment while moving
+# But, we might want to look at individual variation among animals in their movement behavior
+# Why might we want to do this? Discussion break!
+#...............
+#...............
+
+# So let's fit individual SSFs to each of our animals.
+# First, let's make a function for individual SSF models
+fitted_ssf <- function(issf_model){
+  fit_issf(case_ ~ elev_s_end + tri_s_end + ndvi_s_end + strata(stepID),method = "efron", robust = TRUE, data=issf_model)
 }
 
-# For the function to work, we have to make our model only class "coxph"
-class(m0)
-class(m0) <- "coxph"
-TestRanef(m0,m0_me)
+# Next, we can apply the conditional logistic regression model to our nested data
+ssfdat.all %>% 
+  nest(-ID) %>% 
+  mutate(mod = map(data, fitted_ssf)) -> m.ind
+
+# Package broom can help us tidy up out models into a tibble
+m.ind %>%
+  mutate(tidy = map(mod, ~ broom::tidy(.x$model)),
+         n = map_int(data, nrow)) -> m.ind
+
+# To vizualise our model output, we can reveal the estimates of all iSSFs
+m.ind$tidy
+
+# To vizualize or report the results, we may want to create a data frame with the 
+#   coefficients from all the SSFs
+ssf_coefs <- m.ind %>%
+  unnest(tidy) 
+
+# Just to make it a little more interesting, we can add the sex of the animals for our vizualization
+n.covs <- 3
+unique(m.ind$ID)
+mutate(ssf_coefs, sex = c(rep(c("f","f","m","m","m","f","m","m","f"),each = n.covs))) -> ssf_coefs
+
+# Plot the coefficients!
+ssf_coefs %>% 
+  ggplot(., aes(x=term, y=estimate, group = ID, col = factor(ID), pch = sex)) + 
+  geom_pointrange(aes(ymin = conf.low, ymax = conf.high),
+                  position = position_dodge(width = 0.7), size = 0.8) +
+  geom_hline(yintercept = 0, lty = 2)+
+  facet_wrap(~term, scales="free") + 
+  labs(x = "Covariate", y = "Relative Selection Strength") +
+  theme_light()
+
