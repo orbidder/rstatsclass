@@ -66,30 +66,7 @@ wigs$Date_Time <- as.POSIXct(wigs$Date_Time, "%Y-%m-%d %H:%M:%S", tz = "America/
 
 #Answer 1:
 #####################################################################################################
-winter_int <- interval("2016-01-01", "2016-01-07")
-spring_int <- interval("2016-05-12", "2016-05-14")
 
-winter <- subset(wigs, Date_Time %within% winter_int) #One way using subset
-spring <- subset(wigs, Date_Time %within% spring_int)
-
-
-winter <- wigs[wigs$Date_Time %within% winter_int,] #another by slicing the DF
-spring <- wigs[wigs$Date_Time %within% spring_int,]
-
-winter <- as.ltraj(xy = data.frame("x" = winter$UTM_X, "y"= winter$UTM_Y), 
-                       date = as.POSIXct(winter$Date_Time), 
-                       id = winter$Elk, 
-                       burst = winter$Elk, 
-                       proj4string = CRS('+init=epsg:32612'))
-
-spring <- as.ltraj(xy = data.frame("x" = spring$UTM_X, "y"= spring$UTM_Y), 
-                   date = as.POSIXct(spring$Date_Time), 
-                   id = spring$Elk, 
-                   burst = spring$Elk, 
-                   proj4string = CRS('+init=epsg:32612'))
-
-plot(winter) #Elk has a mixture of steps, some of them small, going back on itself.
-plot(spring) #track is much more linear, animal goes in one direction. Looks like a migration
 #####################################################################################################
 
 #Now if I use the ld function from adehabitat to turn the ltraj objects back in to data frames, I can see
@@ -335,13 +312,6 @@ Par0_m2$Par
 #############################################################################################
 #Answer 2:
 # fit model
-m2 <- fitHMM(data = elephantData, 
-             nbStates = 2, 
-             dist = dist, 
-             Par0 = Par0_m2$Par,
-             #beta0=Par0_m2$beta, 
-             stateNames = stateNames, 
-             formula=formula)
 
 #############################################################################################
 
@@ -605,10 +575,9 @@ plot(nfsFits,legend.pos="topright")
 # Providing there is time, I'd like us all to work with the folks near us to run a simple space-state model
 # from start to finish. We will use a new data set from elk.
 
-elk_data <- read.csv('elk_data.csv')
+elk_data <- read.csv('elk_data.csv') #load the data in
 
-#elk_data <- subset(elk_data, ID != "elk-115")
-head(elk_data)
+head(elk_data) #take a look at the first few rows
 
 #Steps to follow;
 #1) Use the prepData function from momentuHMM to convert the data to the appropriate format.
@@ -635,57 +604,13 @@ head(elk_data)
 #Answers 3#
 ########################################################################################################
 #1
-colnames(elk_data)
-elkData <- momentuHMM::prepData(data=elk_data, 
-                                covNames= c('dist_water',
-                                            'dist_openfor',
-                                            'dist_devel'), 
-                                coordNames = c("X","Y"))
+
 
 #2
-# label states
-stateNames <- c("encamped","exploratory")
 
-# Distributions for observation processes
-dist = list(step = "gamma", angle = "vm")
+#3
 
-#To get some good starting values, let's look at our data
-plot(elkData)
-
-# initial parameters
-Par0_m1 <- list(step=c(0.1, #shape encamped
-                       1, #shape exploratory
-                       0.1, #scale encamped
-                       1, #scale exploratory
-                       0.05, #encamped zeromass
-                       0.01 #exploratory zeromass
-),
-angle=c(pi,
-        0,
-        1, #concentration 1
-        1 #concentration 2
-))
-
-# We use fitHMM to fit the model
-m1 <- momentuHMM::fitHMM(data = elkData, #the data
-             nbStates = 2, #number of states
-             dist = dist, #the distributions we are using for the data streams
-             Par0 = Par0_m1, #the initial values for the distributions
-             estAngleMean = list(angle=TRUE), #whether or not we want to calculate the angle mean
-             stateNames = stateNames,
-             formula = ~1) #labels for the states    
-m1
-plot(m1)
-
-m2 <- momentuHMM::fitHMM(data = elkData, #the data
-                         nbStates = 2, #number of states
-                         dist = dist, #the distributions we are using for the data streams
-                         Par0 = Par0_m1, #the initial values for the distributions
-                         estAngleMean = list(angle=TRUE), #whether or not we want to calculate the angle mean
-                         stateNames = stateNames,
-                         formula = ~ dist_water + dist_openfor + dist_devel) 
-plot(m2)
-AIC(m1, m2)
+########################################################################################################
 
 #Interpretation:
 #state1 has small steps (~350 m), high concentration around pi

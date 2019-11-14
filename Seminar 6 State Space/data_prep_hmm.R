@@ -192,3 +192,29 @@ colnames(seal_ltraj)[11] <- "ID"
 colnames(seal_ltraj)[3] <- "time"
 
 help('as.ltraj')
+
+##Prep for exercise 3, Morales et al 2004#
+trackData <- read.table("http://www.esapubs.org/archive/ecol/E085/072/elk_data.txt",
+                        sep="\t",header=TRUE)
+colnames(trackData)
+elk_data <- trackData[,c("Individual","Easting", "Northing", "Habitat", "dist_water..meters.",
+                         "dist_swamp..meters.", "dist_otw..meters.", "dist_openfor..meters.",
+                         "dist_ntw..meters.", "dist_devel...meters.", "dist_ddf..meters.",
+                         "dist_conifer..meters.")]
+head(elk_data)
+colnames(elk_data) <- gsub("..meters.", "", colnames(elk_data))
+colnames(elk_data) <- gsub("l.", "l", colnames(elk_data))
+colnames(elk_data)[1] <- "ID"
+colnames(elk_data)[2] <- "X"
+colnames(elk_data)[3] <- "Y"
+elk_data$time <- 1:length(elk_data$ID)
+elk_data <- elk_data[,c(1,13,2,3,4:12)]
+elk_data[is.na(elk_data$dist_water),]
+elk_data <- elk_data[1:735,]
+
+elk_data$X <- elk_data$X/1000
+elk_data$Y <- elk_data$Y/1000
+
+elk_data[,6:13] <- scale(elk_data[,6:13])
+
+write.csv(elk_data, 'elk_data.csv', row.names = F)
