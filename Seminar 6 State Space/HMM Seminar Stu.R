@@ -227,10 +227,10 @@ plot(elephantData)
 #The wrapped cuachy describes turning angles from -pi to +pi, it has one parameter, concentration.
 
 # initial parameters
-Par0_m1 <- list(step=c(100, #shape encamped
-                       500, #shape exploratory
-                       100, #scale encamped
-                       200 #scale exploratory
+Par0_m1 <- list(step=c(100, #mean encamped
+                       500, #mean exploratory
+                       100, #sd encamped
+                       200 #sd exploratory
                        ),
                 angle=c(0.3, #concentration 1
                         0.7 #concentration 2

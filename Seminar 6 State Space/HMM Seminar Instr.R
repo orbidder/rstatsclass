@@ -250,10 +250,10 @@ plot(elephantData)
 #The wrapped cuachy describes turning angles from -pi to +pi, it has one parameter, concentration.
 
 # initial parameters
-Par0_m1 <- list(step=c(100, #shape encamped
-                       500, #shape exploratory
-                       100, #scale encamped
-                       200 #scale exploratory
+Par0_m1 <- list(step=c(100, #mean encamped
+                       500, #mean exploratory
+                       100, #sd encamped
+                       200 #sd exploratory
                        ),
                 angle=c(0.3, #concentration 1
                         0.7 #concentration 2
@@ -653,18 +653,18 @@ dist = list(step = "gamma", angle = "vm")
 plot(elkData)
 
 # initial parameters
-Par0_m1 <- list(step=c(0.1, #shape encamped
-                       1, #shape exploratory
-                       0.1, #scale encamped
-                       1, #scale exploratory
+Par0_m1 <- list(step=c(0.1, #mean encamped
+                       1, #mean exploratory
+                       0.1, #sd encamped
+                       1, #sd exploratory
                        0.05, #encamped zeromass
                        0.01 #exploratory zeromass
-),
-angle=c(pi,
-        0,
-        1, #concentration 1
-        1 #concentration 2
-))
+                      ),
+                  angle=c(pi, #mean encamped
+                          0, #mean exploratory
+                          1, #concentration 1
+                          1 #concentration 2
+                          ))
 
 # We use fitHMM to fit the model
 m1 <- momentuHMM::fitHMM(data = elkData, #the data
