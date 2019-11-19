@@ -72,11 +72,11 @@ plot(t, NSD)
 #Exercise 2: Edit the equation to make it produce a mixed-migration pattern (hint: look at the zeta parameter),
 # how does this curve differ to the migrant one? Which values of zeta might make it difficult to discern between
 # the two model types?
-
+###################################################################################################
 #Ex2 Solution:
 NSD <- delta/(1+exp((theta-t)/phi))- (delta*zeta)/(1+exp((theta+2*phi+2*phi2+rho-t)/phi2)) #mixmig
 plot(t, NSD)
-
+###################################################################################################
 
 #Now we will produce a more realistic NSD curve, with some noise to represent the movement an animal
 #might make to seek out resources, or avoid predation
@@ -99,7 +99,7 @@ mig_mod <-nls(NSD ~ d/(1+exp((th-t)/p1)) - d/(1+exp((th+2*p1+2*p2+rh1-t)/p2)),
                             p2=10,
                             rh1=150))
 summary(mig_mod) #are the estimates for the parameters close to the ones above? The added noise has muddied
-#our estimates a bit (we don't get the exact values above. 
+#our estimates a bit (we don't get the exact values above). 
 #The more imprecise our measurements (i.e. the more noise), the worse they'll be.
 #Luckily, GPS data are pretty accurate, but often migratory processes aren't the only thing dictating where
 #animals travel on a fine scale. If other influences are strong, the more noise there will be.
@@ -115,7 +115,7 @@ lines(t, predict(mig_mod), col = "red", lty=2, lwd=3) #looks good!
 # If you get a 'singular gradient' error, you need to choose better initial values.
 # For good intial values, try plotting and trying to gauge a likely estimate from the plot.
 # (15 mins).
-
+####################################################################################################
 #Ex3 Solution:
 mix_mod <-nls(NSD ~ d/(1+exp((th-t)/p1)) - (d*z)/(1+exp((th+2*p1+2*p2+rh1-t)/p2)), 
               start = list(d=5000,
@@ -136,6 +136,7 @@ nom_mod <- nls(NSD ~ b * t,
 res_mod <- nls(NSD ~ g*(1-exp(k*t)), 
               start = list(g=4000,
                            k=-0.8))#, control = list(maxiter = 500)) #note students might need to add
+#####################################################################################################
 
 #Now let's look at the fit of each model to our data
 plot(t, NSD)
@@ -211,14 +212,15 @@ elk.nsd1 <- mvmtClass(tracks1)
 plot(elk.nsd1)
 
 #Exercise 4: using the output plot of elk.nsd1, what change the call to mvmtClass() 
-#so that all models converge (5 minutes).
+#so that all models converge (10 minutes).
 #Hint: look at the additional arguements above!
 
 #Ex4 Solution:
+###################################################################################################
 elk.nsd1 <- mvmtClass(tracks1, stdt = "4-1") #start fitting model in april!
 #or
 elk.nsd1 <- mvmtClass(tracks1, p.est=pEst(s.t=160)) #specify midpoint of outward migration in may 
-
+###################################################################################################
 #Now that all models have converged, let's take a look at the plots again
 plot(elk.nsd1)
 
@@ -233,7 +235,7 @@ plot(elk.nsd1)
 spatmig(tracks1, elk.nsd1)
 
 #Now we see that in 2017, our elk has returned to a different winter range. This winter range switching is
-#quite rare in elk, only about 1-3% of migrations result in winter range switching.
+#quite rare for elk in WY, only about 1-3% of migrations result in winter range switching.
 
 #We might also be interested in the parameter estimates, or the estimated migration timings. These results
 #could be used in other analyses, such as time-to-event modelling (to see what environmental factors trigger
@@ -241,6 +243,7 @@ spatmig(tracks1, elk.nsd1)
 
 #Exctract migration times
 time_df <- mvmt2dt(elk.nsd1, mod = "mixmig") #extracts the timing estimates from our mixed migration models
+
 #Here's some code to tidy the output in to a dataframe for saving
 time_df <- ldply(time_df, data.frame) #convert to DF for export, dday is julian day etc...
 time_df$dday <- yday(time_df$date) #I often prefer julian days to decimal days
@@ -272,12 +275,12 @@ write.csv(params_df, paste("nsd_params_wiggins",df_elk1$id[1],".csv",sep = "")) 
 #Try your best to get all models to converge, but ask if you need a hand.
 
 df_elk2 <- read.csv("elk2_data.csv", header = T, stringsAsFactors = F)
+df_elk2$Date_Time <- as.POSIXct(df_elk2$Date_Time, "%Y-%m-%d %H:%M:%S", tz = "MST")
 
 #...the rest is up to you!
 
 #Ex5 Solution:
-df_elk2$Date_Time <- as.POSIXct(df_elk2$Date_Time, "%Y-%m-%d %H:%M:%S", tz = "MST")
-
+#############################################################################################################
 plot(df_elk1$UTM_X, df_elk1$UTM_Y) #make a quick plot of the data
 unique(df_elk2$id) #which IDs in file?
 unique(df_elk2$Year) #which years in file?
@@ -325,3 +328,4 @@ for (i in 1:length(params_df)){
 params_df <- do.call(rbind.fill, params_df) #here rbind.fill() is a function from the plyr package
 
 #write.csv(params_df, paste("nsd_params_wiggins",df_elk1$id[1],".csv",sep = "")) #save for later
+##############################################################################################################
