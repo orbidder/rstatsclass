@@ -8,7 +8,7 @@ install_github("dbspitz/migrateR/migrateR", build_vignettes = T)
 
 library(migrateR)
 library(plyr)
-
+help('migrateR')
 #Introduction#
 #In this class we're going to look at how we can characterize patterns in animal movements using 
 #Net Squared Displacement (NSD) modelling. NSD is the squared straight line distance between two points.
@@ -143,7 +143,8 @@ AIC(res_mod)
 #So that's the process going on behind NSD modelling. Of course, writing scripts to calculate the NSD
 #for every point for every animal and then fitting the models and performing model selection for each animal
 #individually is arduous. Luckily, Derek Spitz and colleagues have written a great package that automates
-#a lot of these tasks, which we will now learn how to use.
+#a lot of these tasks, which we will now learn how to use. A paper that describes this package can be found
+#in the session folder (Spitz et al. 2017).
 
 #First we'll load in some elk GPS location data, collected for the Wiggins Fork herd in the South-Eastern
 #part of the Greater Yellowstone Ecosystem
@@ -223,6 +224,8 @@ spatmig(tracks1, elk.nsd1)
 
 #Exctract migration times
 time_df <- mvmt2dt(elk.nsd1, mod = "mixmig") #extracts the timing estimates from our mixed migration models
+#Note: these times are estimates in t of when NSD = p * delta. Default is 0.05, so when animals reach 5% of
+#total distance.
 
 #Here's some code to tidy the output in to a dataframe for saving
 time_df <- ldply(time_df, data.frame) #convert to DF for export, dday is julian day etc...
@@ -245,6 +248,23 @@ params_df <- do.call(rbind.fill, params_df) #here rbind.fill() is a function fro
 #are specific to the top model for that burst. e.g. nomadic contains only a beta parameter!
 
 write.csv(params_df, paste("nsd_params_wiggins",df_elk1$id[1],".csv",sep = "")) #save for later
+
+#A Quick Note:
+#Spitz et al. (2017) always recommend examining models visually in order to make sure that the fit
+#is adequate. There's a common criticism levelled against model selection through AIC, and it's that
+#AIC will tell you which of your models is best relative to each other, but not if any of them 
+#actually fit the data well. Here's an example;
+
+im<-load.image("bad_fit.PNG")
+plot(im, axes = F)
+
+#You can see although 'mixmig' has given us a delta-AIC of 0 (it is the best of the models), it still
+#doesn't fit our data very well. These sorts of model fits are typical when fitting to data from
+#animals that don't go very far (in my experience, YMMV), and might have overlapping ranges anyway.
+#Remember we can always convert NSD (Km^2) to a linear distance using sqrt(NSD). In this example
+#delta looks to be about 200 Km^2, so the linear distance between the ranges is sqrt(200) = 14.12 Km.
+#Compare this with our earlier example where delta was ~ 2000 Km^2, so sqrt(2000) = 44.7 Km. 
+#NSD models perform best when applied to long distance seasonal migrants (again, YMMV!)
 
 #Exersize 5: Using everything you have learned, load in the file XXX, fit some NSD models and observe
 #the results. How do they differ to the first animal?
