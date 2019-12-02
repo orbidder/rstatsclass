@@ -1,3 +1,34 @@
+# Today we will be working with cluster data. Animal create "clusters" of GPS locations
+#   in places that they spend a significant amount of time (relevant to the fix rate
+#   of their tracking device). We care about GPS clusters becasue they can help us track 
+#   animals, and in particulat, to find out what animals were doing at specific, important
+#   locations. We use GPS clusters to find feeding locations, den sites, sleeping sites,
+#   and sometimes other fun things like important communication locations.
+
+# Our class today will go over what a cluster is, how to specify it, and how to extract
+#   clusters from GPS data. 
+# Next, we will predict a certain kind of cluster (kill sites) from all GPS data using 
+#   a model that we will fit with only field-investigated clusters
+# Finally, we will apply what we learned in lesson 4 (RSFs) to see which habitat 
+#   characteristics are selected for at a specific cluster type
+
+# Syntax
+install.packages("tidyverse")
+install.packages("lubridate")
+# For day/night column and making sure data have a standardized fix rate
+install.packages("amt")
+# Spatial packages
+install.packages("rgeos")
+install.packages("raster")
+install.packages("rgdal")
+install.packages("maptools")
+install.packages("sf")
+# Modeling
+install.packages("lme4")
+# Cross-validation (createDataPartition)
+install.packages("caret")
+
+
 library(maptools)
 library(rgdal)
 library(tidyverse)
