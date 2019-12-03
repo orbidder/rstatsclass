@@ -55,7 +55,8 @@ puma_tr1 <- read_csv("Seminar 5 SSFs/puma_data_2015.csv") %>%
   # First, select just the columns you need for the analysis
   dplyr::select(ID = animals_id, 5:7) %>% 
   # Then, make sure your date/times are in the correct time zone
-  mutate(timestamp = lubridate::with_tz(ymd_hms(acquisition_time,tz="America/Los_Angeles"),"America/Argentina/San_Juan")) 
+  # Right now, the acquisition time is in UTC
+  mutate(timestamp = lubridate::with_tz(acquisition_time,"America/Argentina/San_Juan")) 
 
 # To treat each animal differently, we will nest the data by animal ID
 puma_tr1 <- puma_tr1 %>%  nest(-ID) 

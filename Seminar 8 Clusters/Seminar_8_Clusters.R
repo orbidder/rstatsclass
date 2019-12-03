@@ -10,9 +10,10 @@
 # Next, we will predict a certain kind of cluster (kill sites) from all GPS data using 
 #   a model that we will fit with only field-investigated clusters
 # Finally, we will apply what we learned in lesson 4 (RSFs) to see which habitat 
-#   characteristics are selected for at a specific cluster type
+#   characteristics are selected for at a specific cluster type (the kill sites modeled
+#   in the above step)
 
-# Syntax
+# Syntax and datetimes
 install.packages("tidyverse")
 install.packages("lubridate")
 # For day/night column and making sure data have a standardized fix rate
@@ -28,7 +29,7 @@ install.packages("lme4")
 # Cross-validation (createDataPartition)
 install.packages("caret")
 
-
+# Load your libraries
 library(maptools)
 library(rgdal)
 library(tidyverse)
@@ -40,23 +41,36 @@ library(rgeos)
 library(caret)
 library(amt)
 
-read_csv("Seminar 5 SSFs/puma_data_2015.csv") %>% 
-  dplyr::select(ID = animals_id, 5:7) %>% 
-  mutate(timestamp = lubridate::with_tz(ymd_hms(acquisition_time,tz="America/Los_Angeles"),"America/Argentina/San_Juan")) %>%
-  arrange(., ID, timestamp) %>%
-  # In the interest of time, let's only look at data collected in June and July of 2015
-  filter(lubridate::month(timestamp) %in% 6:7) -> puma.data
+# Read in the data from file "puma_data_2015.csv" in the "Seminar 5 SSFs" folder. 
+# Set up a pipe with the following steps:
+# 1. bring in the csv
+# 2. select only columns called animals_id, acquisition_time, longitude, and latitude
+#   2b. when you select column animals_id, rename it as "ID"
+# 3. make a new column called "timestamp" that is in the correct tz of "America/Argentina/San_Juan"
+#   IMPORTANT: the acquisition_time column is in UTC, so you don't need to use force_tz
+#     to correct it
+# 4. sort the data by ID, then timestamp
+# 5. In the interest of time, we're only going to look at data collected in the winter,
+#     so subset the data to include only June and July dates.
+# 6. name the final tibble "puma.data"
 
-# Make a track and figure out if each location is day or night
-# We need to make a track to make sure we eliminate extraneous fixes if there are multiple fix rates in the data
+# Let's look at your tibbles!
+puma.data
+
+# We need to make a track to make sure we eliminate extraneous fixes 
+#   if there are multiple fix rates in the data
+# We can also figure out if each location is day or night within the track
 puma.data %>% 
+  # make a track
   mk_track(., longitude, latitude, id = ID, timestamp, crs = CRS("+init=epsg:4326")) %>% 
+  # day or night?
   time_of_day() %>%
+  # make sure the track is arranged correctly by ID and time
   arrange(id,t_)-> puma_track
 
-# Make sure the fix rate is consistent. 
-# This is essential if you have a variable fix rate. 
-# In this dataset, we have 3 hr, 1 hr, and 30 minute fixes
+# Next we need to make sure the fix rate is consistent. 
+# This step is essential if you have a variable fix rate in your data!
+# In our full dataset, we have 3 hr and 1 hr fixes
 # To compare, let's first see how many data rows we have
 nrow(puma_track)
 # Then, we resample our data based on the 3 hr fix rate
@@ -75,8 +89,10 @@ nrow(puma_track)
 #         sunset = sunriset(SpatialPoints(cbind(longitude,latitude), proj4string=CRS("+init=epsg:4326")), timestamp, direction="sunset", POSIXct.out=TRUE)[,2],
 #         daynight = ifelse(timestamp>sunrise&timestamp<sunset,1,0)) -> puma.data
 
-# But, since we had variable fix rate and identified day/night from our track
-#    we must now attach the day/night data to the original dataframe
+# But, if we had a variable fix rate and identified day/night 
+#   from our track, we could now attach the day/night data to the original dataframe
+#   using a right join
+# Why do we use a right join??
 puma.data %>%
   # We attach the day/night covariate by joining by time and puma id
   right_join(.,puma_track,by=c("timestamp" = "t_", "ID" = "id")) %>%
@@ -97,7 +113,7 @@ npuma <- length(unique(puma.data$ID))
 
 # Specify the time zone the data are in (timezone_1) 
 #   and the time zone they should be in (timezone_2)
-timezone_1 <- "America/Los_Angeles"
+timezone_1 <- "UTC"
 timezone_2 <- "America/Argentina/San_Juan"
 
 source("Seminar 8 Clusters/cluster_script.R")
