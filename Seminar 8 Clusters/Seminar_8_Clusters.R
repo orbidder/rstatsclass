@@ -24,6 +24,9 @@ install.packages("raster")
 install.packages("rgdal")
 install.packages("maptools")
 install.packages("sf")
+# Multicolinearity
+install.packages("usdm")
+install.packages("corrr")
 # Modeling
 install.packages("lme4")
 # Cross-validation (createDataPartition)
@@ -40,6 +43,13 @@ library(lubridate)
 library(rgeos)
 library(caret)
 library(amt)
+library(usdm)
+library(corrr)
+
+###*** Portion 1 of today's exercise is on how to generate clusters from GPS data
+# This is really useful to do BEFORE or DURING fieldwork so you can investigate
+#   the clusters on the ground
+# (Break to discuss how to design field sampling protocos with clusters)
 
 # Read in the data from file "puma_data_2015.csv" in the "Seminar 5 SSFs" folder. 
 # Set up a pipe with the following steps:
@@ -113,7 +123,9 @@ npuma <- length(unique(puma.data$ID))
 
 # Specify the time zone the data are in (timezone_1) 
 #   and the time zone they should be in (timezone_2)
-timezone_1 <- "UTC"
+# Because we've already corrected the timezone in the timestamp column, we use the same
+#   timezone for both
+timezone_1 <- "America/Argentina/San_Juan"
 timezone_2 <- "America/Argentina/San_Juan"
 
 source("Seminar 8 Clusters/cluster_script.R")
@@ -140,36 +152,41 @@ points_df<-data.frame(do.call(rbind,points_df))
 
 # Always look at the data to make sure they make sense
 head(centroids_df)
-subset(points_df,ID==4&puma==1)
-puma.data[13:21,]
+subset(points_df,ID==6&puma==1)
+puma.data[52:62,]
 
 # Which cluster characteristics would you add to the cluster function?
 
-# Save the data files
-write.csv(centroids_df, "clustercentroids.csv")
-write.csv(points_df, "clusterpoints.csv")
+## Save the data files
+#write.csv(centroids_df, "clustercentroids.csv")
+#write.csv(points_df, "clusterpoints.csv")
 
-# Save the shape files
-coordinates(centroids_df)<-~x+y
-crs(centroids_df) <- ("+init=epsg:32719")
-writeOGR(centroids_df,".","centroids_df",driver="ESRI Shapefile")
+## Save the shape files
+#coordinates(centroids_df)<-~x+y
+#crs(centroids_df) <- ("+init=epsg:32719")
+#writeOGR(centroids_df,".","centroids_df",driver="ESRI Shapefile")
 
-coordinates(points_df)<-~x+y
-crs(points_df) <- ("+init=epsg:32719")
-writeOGR(points_df,".","points_df",driver="ESRI Shapefile")
+#coordinates(points_df)<-~x+y
+#crs(points_df) <- ("+init=epsg:32719")
+#writeOGR(points_df,".","points_df",driver="ESRI Shapefile")
 
 
 #__________********_________
 
+###*** Portion 2 of today's exercise is on how to use data from field-investigated
+#         clusters to model the probability of a certain cluster type from 
+#         uninvestigated clusters
 # For this next exercise, we will predict kills by modeling investigated clusters
-#   and applying the model to uninvestigated clusters
+#   and applying the kill prediction model to uninvestigated clusters
 
+# Let's bring in our field-collected data
 centroids_df <- read_csv("Seminar 8 Clusters/investigatedclusters.csv")%>% 
   st_as_sf(., coords = 3:4, crs = "+init=epsg:32719") %>% 
   mutate(first = lubridate::ymd_hms(first,tz="America/Argentina/San_Juan"),
          last = lubridate::ymd_hms(last,tz="America/Argentina/San_Juan"),
          killYN = as.factor(killYN))
 
+# Check out the spatial distribution of the data to get a better feel for it
 plot(centroids_df["killYN"])
 plot(centroids_df["nightratio"])
 plot(centroids_df["actratio"])
@@ -187,28 +204,62 @@ centroids_df %>%
 
 #__________********_________
 
-# ACTIVITY: Now, use what you learned from fitting an RSF model to fit a
+# ACTIVITY: Now, use what you learned from fitting an RSF model in Seminar 4 to fit a
 #   kill prediction model (also a mixed-effects binomial logistic regression model)
 #   with cluster characteristics as predictor variables
-# Assess how to include correlated variables, write your candidate models, 
-#   and perform model selection by comparing AIC values
+# Steps:
+#   1. assess how to include correlated variables
+#   2. write your candidate models
+#   3. perform model selection by comparing AIC values
 
 # Let's start by looking at the distribution and correlation among the covariates
+#   for the non-kill clusters
 centroids_df_inv %>% 
+  filter(killYN == 0) %>% 
   dplyr::select(time:points,bin) %>% 
   gather() %>% 
   ggplot(aes(value)) +
   geom_histogram() +
   facet_wrap(~key, scales = "free")
+# Now edit the above code to look at the distribution of kill clusters 
+# What do these distributions tell us? 
+# What might we change if we were to do the study again?
 
-cor(centroids_df_inv[,c(3:7,10)])
+# Use the "cor" command to look at correlations between our 6 covariates
+#...
+#...
+#...
 
-# To vizualize these correlations in space, we can use package corrr
+
+# To vizualize these correlations, we can also use package corrr
 library(corrr)
 centroids_df_inv %>% 
   dplyr::select(time:points,bin) %>% 
   correlate() %>% 
   network_plot()
+
+# You can also use variance inflation factor (VIF) rather than correlation 
+#   to look at mutlicollinearity
+# If there are variables with values higher than 4, that suite of variables 
+#   shouldn't be in the same model
+vif(as.data.frame(centroids_df_inv[,c(3:7,10)]))
+# What happens when we get rid of one of the variables with a >4 VIF score?
+vif(as.data.frame(centroids_df_inv[,c(4:7,10)]))
+vif(as.data.frame(centroids_df_inv[,c(3,5:7,10)]))
+# What if we only keep one of the variables with a >4 VIF score?
+vif(as.data.frame(centroids_df_inv[,c(3,5:6,10)]))
+vif(as.data.frame(centroids_df_inv[,c(4:6,10)]))
+vif(as.data.frame(centroids_df_inv[,c(5:7,10)]))
+
+# Compare the correlation value of the "bin" covariate with others, and then look
+#   at its VIF scores with the suites of covariates
+# Becasue "bin" is a binomial covariate, it responds a little differently between approaches
+# How do you think you should proceed with this covariate?
+
+# Scale and center your variables
+#....
+#....
+#....
 
 
 # Now write out your candidate models and select the best model
@@ -226,7 +277,7 @@ pumamodel3<-
 # For this, we will use bootstrapping cross-validation
   
 # First, we set a seed so our results are reproducible
-  set.seed(6)
+set.seed(6)
 
 # Then, we decide on a number of simulations we want to perform
 n.sim = 100
@@ -249,7 +300,7 @@ for (i in 1:n.sim){
   training <- traintest[inTrain,]
   testing <- traintest[-inTrain,]
   
-  # ***Write out your best model below to fit using the training data
+  # ***Write out your best model below to fit using the training data***
   test.model<-glmer()
   
   # Next, predict the testing data with the model fit from the training data
@@ -301,7 +352,9 @@ confM
 #   Modify the cutoff code in the cross validation loop to find the best cutoff
 #     for all of the investigated cluster data
 
-
+#...
+#...
+#...
 
 
 # Predict model output for uninvestigated clusters
@@ -311,14 +364,19 @@ centroids_df$predictkill<-predict(pumamodel1,newdata=centroids_df,
 # And apply the optimal cutoff to the predicted values
 centroids_df$modkillYN<-ifelse(centroids_df$predictkill>cutoff,1,0)
 
-# Compare your model output to your investigated cluster data
-table(centroids_df$killYN,centroids_df$modkillYN)
-
-# And look at the distribution of your modeled data from all generated clusters
+# Look at the distribution of your modeled data from all generated and 
+#   investigated clusters
 table(centroids_df$modkillYN)
+table(centroids_df$killYN)
+
+# Compare your model output to your investigated cluster data
+confusionMatrix(as.factor(centroids_df$killYN), as.factor(centroids_df$modkillYN))
+
+# How might a different cutoff value change your results?
+
 
 
 #__________********_________
-# ACTIVITY: Use the environmental covariates in the Seminar 8 folder to fit an 
+# ACTIVITY: Use the environmental covariates in the Seminar 5 folder to fit an 
 #   RSF and and RSPF with your kill / no kill data
 
