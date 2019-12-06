@@ -1,7 +1,7 @@
 # Today we will be working with cluster data. Animal create "clusters" of GPS locations
 #   in places that they spend a significant amount of time (relevant to the fix rate
-#   of their tracking device). We care about GPS clusters becasue they can help us track 
-#   animals, and in particulat, to find out what animals were doing at specific, important
+#   of their tracking device). We care about GPS clusters because they can help us track 
+#   animals, and in particular, to find out what animals were doing at specific, important
 #   locations. We use GPS clusters to find feeding locations, den sites, sleeping sites,
 #   and sometimes other fun things like important communication locations.
 
@@ -24,6 +24,7 @@ install.packages("raster")
 install.packages("rgdal")
 install.packages("maptools")
 install.packages("sf")
+install.packages("mapview")
 # Multicolinearity
 install.packages("usdm")
 install.packages("corrr")
@@ -39,6 +40,7 @@ library(tidyverse)
 library(raster)
 library(lme4)
 library(sf)
+library(mapview)
 library(lubridate)
 library(rgeos)
 library(caret)
@@ -66,6 +68,35 @@ library(corrr)
 
 # Let's look at your tibbles!
 puma.data
+
+# ____________***____________
+# Concept break!
+
+# First let's bring in our environmental data to use as a basemap
+raster_files <- list.files("Seminar 5 SSFs/",pattern = ".tif") 
+envtrasters <- raster::stack(paste0("Seminar 5 SSFs/", raster_files))
+names(envtrasters) <- c("dem", "max_ndvi", "slope",  "tri")
+
+# So what is a cluster?
+# Let's look at a puma track to get a feel for it
+
+# We'll start by just grabbing about a week of data from one puma for visualization
+puma.data %>% 
+  filter(ID == 6) %>% 
+  slice(., 1:60) -> puma_points
+puma.data %>% 
+  filter(ID == 6) %>% 
+  slice(., 1:60) %>% 
+  summarise(do_union = FALSE) %>%
+  st_cast(., "LINESTRING") -> puma_lines
+
+# Vizualize your tracks!
+plot(crop(envtrasters[[2]],extent(puma_lines)))
+plot(st_geometry(puma_lines),add=T)
+plot(st_geometry(puma_points),add=T)
+
+# Or you can zoom in on a track in Mapview!
+mapview(puma_lines)
 
 # We need to make a track to make sure we eliminate extraneous fixes 
 #   if there are multiple fix rates in the data
@@ -114,6 +145,7 @@ puma.data %>%
   # Finally, we can transform our data to UTMs from latlongs
   st_as_sf(., coords = 3:4, crs = "+init=epsg:4326") %>%
   st_transform("+init=epsg:32719") -> puma.data
+
 
 # Set the time (days) and distance (meters) windows, as well as the fix rate
 s_time <- 1.33
@@ -378,5 +410,6 @@ confusionMatrix(as.factor(centroids_df$killYN), as.factor(centroids_df$modkillYN
 
 #__________********_________
 # ACTIVITY: Use the environmental covariates in the Seminar 5 folder to fit an 
-#   RSF and and RSPF with your kill / no kill data
+#   RSF with your new predicted kill dataset
+# Hint: You can use the code in the Seminar 4 exercise!
 
