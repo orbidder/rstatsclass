@@ -90,19 +90,24 @@ puma.data %>%
   summarise(do_union = FALSE) %>%
   st_cast(., "LINESTRING") -> puma_lines
 
-# Vizualize your tracks!
+# Vizualize your tracks
 plot(crop(envtrasters[[2]],extent(puma_lines)))
 plot(st_geometry(puma_lines),add=T)
 plot(st_geometry(puma_points),add=T)
 
-# Or you can zoom in on a track in Mapview!
+# Or you can zoom in on a track in Mapview
 mapview(puma_lines)
+
+# Try some other pumas over different time periods!
+#...
+#...
 
 # ____________***____________
 
-# We need to make a track to make sure we eliminate extraneous fixes 
-#   if there are multiple fix rates in the data
-# We can also figure out if each location is day or night within the track
+# Before we generate our clusters, we need to make a track to make sure 
+#   we eliminate extraneous fixes (if there are multiple fix rates in the data)
+# We can also figure out if each location is day or night within the track. Fun with piping!
+
 puma.data %>% 
   # make a track
   mk_track(., longitude, latitude, id = ID, timestamp, crs = CRS("+init=epsg:4326")) %>% 
@@ -111,10 +116,10 @@ puma.data %>%
   # make sure the track is arranged correctly by ID and time
   arrange(id,t_)-> puma_track
 
-# Next we need to make sure the fix rate is consistent. 
+# Now that we have a track, we need to make sure the fix rate is consistent. 
 # This step is essential if you have a variable fix rate in your data!
 # In our full dataset, we have 3 hr and 1 hr fixes
-# To compare, let's first see how many data rows we have
+# To compare, let's first see how many data rows we have to start
 nrow(puma_track)
 # Then, we resample our data based on the 3 hr fix rate
 puma_track %>% group_by(id) %>% nest() %>% 
@@ -136,6 +141,8 @@ nrow(puma_track)
 #   from our track, we could now attach the day/night data to the original dataframe
 #   using a right join
 # Why do we use a right join??
+# ....
+
 puma.data %>%
   # We attach the day/night covariate by joining by time and puma id
   right_join(.,puma_track,by=c("timestamp" = "t_", "ID" = "id")) %>%
@@ -148,7 +155,7 @@ puma.data %>%
   st_as_sf(., coords = 3:4, crs = "+init=epsg:4326") %>%
   st_transform("+init=epsg:32719") -> puma.data
 
-
+# Now that the GPS data are in the right format, we can generate our clusters!
 # Set the time (days) and distance (meters) windows, as well as the fix rate
 s_time <- 1.33
 s_dist <- 20
@@ -162,7 +169,15 @@ npuma <- length(unique(puma.data$ID))
 timezone_1 <- "America/Argentina/San_Juan"
 timezone_2 <- "America/Argentina/San_Juan"
 
+# We can use "source" to link our cluster script to this console
 source("Seminar 8 Clusters/cluster_script.R")
+
+# However, before we move on, let's look at the cluster script itself
+# Open the cluster_script file and look under the hood
+
+#_______***_______
+# Cluster source file break
+#_______***_______
 
 # Now run the cluster function!
 # This will give you a centroids csv file and a points csv file
@@ -266,7 +281,6 @@ centroids_df_inv %>%
 
 
 # To vizualize these correlations, we can also use package corrr
-library(corrr)
 centroids_df_inv %>% 
   dplyr::select(time:points,bin) %>% 
   correlate() %>% 
@@ -297,12 +311,14 @@ vif(as.data.frame(centroids_df_inv[,c(5:7,10)]))
 
 
 # Now write out your candidate models and select the best model
+# Hint: components are dependent variable, independent varaibles, random effects,
+#         family, and data
 
-pumamodel1<-
+clustermodel1 <- glmer()
   
-pumamodel2<-
-  
-pumamodel3<-
+clustermodel2 <-
+
+clustermodel3 <-
   
   
 #__________********_________ 
@@ -362,7 +378,6 @@ for (i in 1:n.sim){
   # Then we can assign our model output values to be kills (1) or not (0)
   predict2<-ifelse(predict1>cutoff,1,0)
   
-  
   # Finally, we summarize the results by assessing the accuracy of the 
   #   model predictions in the testing dataset
   confM<-confusionMatrix(as.factor(predict2), as.factor(testing$killYN))
@@ -385,6 +400,7 @@ confM
 #   to apply to our uninvestigated clusters
 #   Modify the cutoff code in the cross validation loop to find the best cutoff
 #     for all of the investigated cluster data
+# Note: Make sure to assign the optimal cutoff value as "cutoff"
 
 #...
 #...
@@ -392,11 +408,12 @@ confM
 
 
 # Predict model output for uninvestigated clusters
-centroids_df$predictkill<-predict(pumamodel1,newdata=centroids_df,
+# Put your best model in as the first command
+centroids_df$predictkill <- predict(**ENTER MODEL HERE**,newdata=centroids_df,
                                   type="response",allow.new.levels=T)
 
 # And apply the optimal cutoff to the predicted values
-centroids_df$modkillYN<-ifelse(centroids_df$predictkill>cutoff,1,0)
+centroids_df$modkillYN <- ifelse(centroids_df$predictkill>cutoff,1,0)
 
 # Look at the distribution of your modeled data from all generated and 
 #   investigated clusters
