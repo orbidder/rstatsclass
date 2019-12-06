@@ -98,6 +98,8 @@ plot(st_geometry(puma_points),add=T)
 # Or you can zoom in on a track in Mapview!
 mapview(puma_lines)
 
+# ____________***____________
+
 # We need to make a track to make sure we eliminate extraneous fixes 
 #   if there are multiple fix rates in the data
 # We can also figure out if each location is day or night within the track
